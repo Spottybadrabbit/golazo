@@ -6,16 +6,31 @@ Experiences track.
 
 Live: **https://golazo-eta.vercel.app**
 
-Three loops, one heartbeat (the feed tick):
+Four loops, one heartbeat (the feed tick):
 
 1. **Hi-Lo streak game** (`/play`). Every 24 seconds: will the featured
    match's win probability, possession, or attack pressure land higher or
    lower after the next TxLINE tick? Streaks multiply XP up to 5x, badges
    unlock Duolingo-style, and hot streaks can be banked for GOAL points.
-2. **Squad sweepstake** (`/squad`). Friends drawn into nations, standings
+2. **Collectible cards** (`/cards`). Spend GOAL points on packs, tap to
+   reveal, chase the legends. Rarity odds printed on every pack; on mainnet
+   the cards mint as compressed NFTs with TxLINE provenance.
+3. **Squad sweepstake** (`/squad`). Friends drawn into nations, standings
    settled live from the feed as fixtures finish. No spreadsheet admin.
-3. **PunditBot** (`/pundit`). Golo the parrot narrates every goal, card, and
+4. **PunditBot** (`/pundit`). Golo the parrot narrates every goal, card, and
    sharp odds move as a Telegram-style chat, derived from feed events.
+
+## Accounts and storage
+
+- **Clerk** handles sign-in, including a Solana wallet (Web3) strategy on the
+  same rails as TxODDS. Set `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` +
+  `CLERK_SECRET_KEY` to enable it; without keys the app runs a demo wallet.
+- **Convex** is the off-chain store: player profiles and an append-only game
+  event log (`convex/schema.ts`, `convex/game.ts`), each verifiable event
+  carrying its TxLINE fixture/sequence and an optional Solana proof ref so the
+  on-chain side stays anchored to TxODDS. Run `npx convex dev` once to
+  provision, then set `NEXT_PUBLIC_CONVEX_URL` to turn on cloud sync; until
+  then the game persists locally.
 
 ## Judging criteria, mapped
 
@@ -38,8 +53,12 @@ adapter in `app/api/live/route.ts` to ride the real Solana-anchored feed.
 ## Stack
 
 Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind v4 · GSAP +
-ScrollTrigger + Lenis · Three.js · Higgsfield-generated brand assets
-(stadium, mascot, trophy, tifo) · Vercel.
+ScrollTrigger + Lenis · Three.js · Clerk (auth + Web3 wallet) · Convex
+(off-chain store) · Higgsfield-generated brand assets (stadium, mascot,
+trophy, tifo, card art, packs) · Vercel.
+
+Palette: near-black `#0a0a0a` + acid-lime volt `#afff00`, cyan and ember
+accents.
 
 ## Run it
 
