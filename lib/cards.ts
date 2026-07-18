@@ -5,12 +5,30 @@
 
 export type Rarity = "common" | "rare" | "legend";
 
+/** The six FUT-style attributes, in display order (PAC SHO PAS DRI DEF PHY). */
+export interface CardStats {
+  pac: number;
+  sho: number;
+  pas: number;
+  dri: number;
+  def: number;
+  phy: number;
+}
+
 export interface CardDef {
   id: string;
   code: string;
   flag: string;
   title: string;
+  /** Short player-style surname shown on the card. */
+  name: string;
+  /** FUT position tag, e.g. RW / ST / CM. */
+  position: string;
+  /** Nation / squad line under the crest. */
+  squad: string;
   rarity: Rarity;
+  rating: number;
+  stats: CardStats;
   art: string;
 }
 
@@ -20,7 +38,12 @@ export const CARDS: CardDef[] = [
     code: "ARG",
     flag: "🇦🇷",
     title: "The Golden Ten",
+    name: "Rivera",
+    position: "RW",
+    squad: "La Albiceleste",
     rarity: "legend",
+    rating: 96,
+    stats: { pac: 89, sho: 92, pas: 94, dri: 97, def: 38, phy: 68 },
     art: "/assets/card-arg.jpg",
   },
   {
@@ -28,7 +51,12 @@ export const CARDS: CardDef[] = [
     code: "BRA",
     flag: "🇧🇷",
     title: "Samba Nine",
+    name: "Do Santos",
+    position: "ST",
+    squad: "Seleção",
     rarity: "rare",
+    rating: 89,
+    stats: { pac: 90, sho: 88, pas: 80, dri: 89, def: 35, phy: 78 },
     art: "/assets/card-bra.jpg",
   },
   {
@@ -36,7 +64,12 @@ export const CARDS: CardDef[] = [
     code: "FRA",
     flag: "🇫🇷",
     title: "Bleu Eight",
+    name: "Laurent",
+    position: "CM",
+    squad: "Les Bleus",
     rarity: "rare",
+    rating: 88,
+    stats: { pac: 76, sho: 82, pas: 87, dri: 86, def: 74, phy: 79 },
     art: "/assets/card-fra.jpg",
   },
   {
@@ -44,7 +77,12 @@ export const CARDS: CardDef[] = [
     code: "ENG",
     flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
     title: "Lion Seven",
+    name: "Ashworth",
+    position: "LW",
+    squad: "Three Lions",
     rarity: "common",
+    rating: 84,
+    stats: { pac: 91, sho: 80, pas: 78, dri: 85, def: 42, phy: 70 },
     art: "/assets/card-eng.jpg",
   },
   {
@@ -52,10 +90,27 @@ export const CARDS: CardDef[] = [
     code: "JPN",
     flag: "🇯🇵",
     title: "Samurai Eleven",
+    name: "Takeda",
+    position: "CAM",
+    squad: "Samurai Blue",
     rarity: "common",
+    rating: 82,
+    stats: { pac: 84, sho: 78, pas: 83, dri: 85, def: 55, phy: 68 },
     art: "/assets/card-jpn.jpg",
   },
 ];
+
+/** Stat rows as [label, value] pairs in the canonical FUT two-column order. */
+export function statRows(s: CardStats): [string, number][] {
+  return [
+    ["PAC", s.pac],
+    ["SHO", s.sho],
+    ["PAS", s.pas],
+    ["DRI", s.dri],
+    ["DEF", s.def],
+    ["PHY", s.phy],
+  ];
+}
 
 export const PACK_COST = 100;
 export const PACK_SIZE = 2;

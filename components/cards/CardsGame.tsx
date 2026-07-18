@@ -1,35 +1,34 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import Confetti from "@/components/Confetti";
+import FutCard from "@/components/cards/FutCard";
+import PackScene from "@/components/cards/PackScene";
+import GlossyIcon, { GlossyShelf } from "@/components/icons/GlossyIcons";
 import {
   CARDS,
   collectionCount,
   drawCard,
   PACK_COST,
   PACK_SIZE,
-  RARITY_LABEL,
   type CardDef,
+  type Rarity,
 } from "@/lib/cards";
 import { BADGES, loadPlayer, savePlayer, type PlayerState } from "@/lib/game";
 
-const RARITY_RING: Record<string, string> = {
-  legend: "border-volt shadow-[0_0_28px_rgba(175,255,0,0.35)]",
-  rare: "border-cyan shadow-[0_0_22px_rgba(0,212,255,0.28)]",
-  common: "border-line",
-};
+const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, legend: 2 };
 
-const RARITY_TEXT: Record<string, string> = {
-  legend: "text-volt",
-  rare: "text-cyan",
-  common: "text-muted",
-};
+function bestRarity(cards: CardDef[]): Rarity {
+  return cards.reduce<Rarity>(
+    (best, c) => (RARITY_ORDER[c.rarity] > RARITY_ORDER[best] ? c.rarity : best),
+    "common",
+  );
+}
 
 export default function CardsGame() {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pulled, setPulled] = useState<CardDef[] | null>(null);
-  const [flipped, setFlipped] = useState<boolean[]>([]);
+  const [packKey, setPackKey] = useState(0);
   const [burst, setBurst] = useState(0);
   const [note, setNote] = useState<string | null>(null);
 
@@ -46,12 +45,9 @@ export default function CardsGame() {
   }
 
   const owned = collectionCount(player.cards ?? {});
+  const canAfford = player.goalPoints >= PACK_COST;
 
-  const openPack = () => {
-    if (player.goalPoints < PACK_COST) {
-      setNote(`You need ${PACK_COST} GOAL for a pack. Bank a streak on the Hi-Lo game first.`);
-      return;
-    }
+  const handleOpen = () => {
     const cards = Array.from({ length: PACK_SIZE }, () => drawCard());
     const nextCards = { ...(player.cards ?? {}) };
     for (const c of cards) nextCards[c.id] = (nextCards[c.id] ?? 0) + 1;
@@ -65,99 +61,114 @@ export default function CardsGame() {
     savePlayer(next);
     setPlayer(next);
     setPulled(cards);
-    setFlipped(cards.map(() => false));
+    if (bestRarity(cards) !== "common") setBurst(Date.now());
     setNote(newBadges.length ? `Badge unlocked: ${newBadges[0].name}` : null);
   };
 
-  const flip = (i: number) => {
-    setFlipped((f) => {
-      if (f[i]) return f;
-      const next = [...f];
-      next[i] = true;
-      if (pulled && pulled[i].rarity !== "common") setBurst(Date.now());
-      return next;
-    });
+  const again = () => {
+    setPulled(null);
+    setBurst(0);
+    setNote(null);
+    setPackKey((k) => k + 1);
   };
+
+  const pulledBest = pulled ? bestRarity(pulled) : "common";
 
   return (
     <div className="relative">
       <Confetti burst={burst} />
 
-      {/* pack opener */}
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-        <div className="grid items-center gap-4 p-5 sm:grid-cols-[auto_1fr_auto]">
-          <Image
-            src="/assets/pack.jpg"
-            alt="A sealed GOLAZO card pack"
-            width={86}
-            height={129}
-            priority
-            className="pack-glow mx-auto rounded-lg"
-          />
-          <div>
-            <h1 className="text-2xl font-extrabold uppercase tracking-tight">Summer packs</h1>
-            <p className="mt-1 text-sm leading-relaxed text-muted">
-              Two cards a pack. Odds printed on the tin: 52% common, 34% rare, 14% legend.
-            </p>
-            <p className="mt-1 font-mono text-xs text-muted">
-              balance: {player.goalPoints} GOAL · collection {owned}/{CARDS.length}
-            </p>
-          </div>
-          <button
-            onClick={openPack}
-            className="rounded-xl bg-volt px-6 py-3.5 font-extrabold uppercase text-night transition-transform hover:scale-[1.03] active:translate-y-px"
-          >
-            Rip it open · {PACK_COST}
-          </button>
+      {/* header — glossy reward shelf + title */}
+      <header className="floodlight relative overflow-hidden rounded-3xl border border-line bg-surface px-5 pb-6 pt-7 text-center">
+        <GlossyShelf className="mb-4" />
+        <h1 className="text-3xl font-extrabold uppercase tracking-tight sm:text-4xl">
+          Summer <span className="text-volt">packs</span>
+        </h1>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
+          Bank Hi-Lo streaks into GOAL, rip foil packs, and chase the walkout. Two cards a pack —
+          odds on the tin: 52% common, 34% rare, 14% legend.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+          <Stat icon="bolt" tint="volt" label="balance" value={`${player.goalPoints} GOAL`} />
+          <Stat icon="shield" tint="cyan" label="collection" value={`${owned}/${CARDS.length}`} />
+          <Stat icon="crown" tint="gold" label="badges" value={`${player.badges.length}`} />
         </div>
-        {note && (
-          <p className="border-t border-line px-5 py-2.5 font-mono text-xs text-volt">{note}</p>
-        )}
-      </div>
+      </header>
 
-      {/* fresh pulls */}
-      {pulled && (
-        <div className="mt-5">
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted">
-            Tap to reveal
-          </h2>
-          <div className="mt-2 grid grid-cols-2 gap-4">
-            {pulled.map((c, i) => (
-              <button
-                key={`${c.id}-${i}`}
-                onClick={() => flip(i)}
-                className="flip-scene block text-left"
-                aria-label={flipped[i] ? c.title : "Face-down card, tap to reveal"}
-              >
-                <div className={`flip-inner relative aspect-[2/3] ${flipped[i] ? "flipped" : ""}`}>
-                  <div className="flip-face absolute inset-0 flex items-center justify-center rounded-2xl border-2 border-volt/40 bg-raised">
-                    <Image src="/assets/pack.jpg" alt="" fill className="rounded-2xl object-cover opacity-80" />
-                    <span className="relative font-mono text-xs uppercase tracking-widest text-volt">
-                      tap
-                    </span>
-                  </div>
-                  <div
-                    className={`flip-face flip-back absolute inset-0 overflow-hidden rounded-2xl border-2 bg-raised ${RARITY_RING[c.rarity]}`}
-                  >
-                    <Image src={c.art} alt={c.title} fill className="object-cover" />
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night via-night/70 to-transparent p-3">
-                      <div className="text-sm font-extrabold uppercase">{c.title}</div>
-                      <div className={`font-mono text-[11px] uppercase ${RARITY_TEXT[c.rarity]}`}>
-                        {c.flag} {c.code} · {RARITY_LABEL[c.rarity]}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
+      {/* pack opener / reveal */}
+      <section className="mt-5 rounded-3xl border border-line bg-gradient-to-b from-raised to-surface p-5 sm:p-7">
+        {!pulled ? (
+          <div className="flex flex-col items-center">
+            <PackScene key={packKey} onOpen={handleOpen} busy={!canAfford} />
+            <button
+              onClick={() => {
+                if (!canAfford)
+                  setNote(`You need ${PACK_COST} GOAL for a pack. Bank a Hi-Lo streak first.`);
+              }}
+              className={`mt-5 rounded-xl px-6 py-3 font-extrabold uppercase tracking-wide transition-transform ${
+                canAfford
+                  ? "cursor-default bg-volt text-night shadow-[0_0_28px_rgba(175,255,0,0.35)]"
+                  : "border border-line bg-surface text-muted"
+              }`}
+            >
+              {canAfford ? `Tap the pack · ${PACK_COST} GOAL` : `Locked · ${PACK_COST} GOAL`}
+            </button>
+            <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-muted">
+              {canAfford ? "tap or press enter to rip" : "bank a streak to afford a pack"}
+            </p>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="relative">
+            {/* light beam behind a non-common walkout */}
+            {pulledBest !== "common" && (
+              <span
+                className="burst-beam pointer-events-none absolute left-1/2 top-0 h-full w-40 -translate-x-1/2 blur-2xl"
+                style={{
+                  background:
+                    pulledBest === "legend"
+                      ? "linear-gradient(to bottom, rgba(175,255,0,0.6), transparent)"
+                      : "linear-gradient(to bottom, rgba(0,212,255,0.5), transparent)",
+                }}
+              />
+            )}
+            <p className="relative text-center font-mono text-[11px] uppercase tracking-widest text-volt">
+              {pulledBest === "legend"
+                ? "★ Legend walkout ★"
+                : pulledBest === "rare"
+                  ? "Rare pull"
+                  : "Pack opened"}
+            </p>
+            <div className="relative mx-auto mt-4 grid max-w-lg grid-cols-2 gap-4 sm:gap-6">
+              {pulled.map((c, i) => (
+                <div
+                  key={`${c.id}-${i}`}
+                  className="walkout"
+                  style={{ animationDelay: `${0.15 + i * 0.35}s` }}
+                >
+                  <FutCard card={c} size="lg" />
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-center">
+              <button
+                onClick={again}
+                className="rounded-xl bg-volt px-6 py-3 font-extrabold uppercase tracking-wide text-night transition-transform hover:scale-[1.03] active:translate-y-px"
+              >
+                Open another
+              </button>
+            </div>
+          </div>
+        )}
+        {note && <p className="mt-4 text-center font-mono text-xs text-volt">{note}</p>}
+      </section>
 
       {/* collection */}
-      <div className="mt-7">
+      <section className="mt-8">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-extrabold uppercase tracking-tight">The collection</h2>
+          <h2 className="flex items-center gap-2 text-lg font-extrabold uppercase tracking-tight">
+            <GlossyIcon name="trophy" tint="gold" size={26} />
+            The collection
+          </h2>
           <span className="font-mono text-xs text-muted">
             {owned}/{CARDS.length}
           </span>
@@ -168,49 +179,65 @@ export default function CardsGame() {
             style={{ width: `${(owned / CARDS.length) * 100}%` }}
           />
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
           {CARDS.map((c) => {
             const copies = player.cards?.[c.id] ?? 0;
             const has = copies > 0;
             return (
-              <div
-                key={c.id}
-                className={`relative aspect-[2/3] overflow-hidden rounded-2xl border-2 ${
-                  has ? `${RARITY_RING[c.rarity]} ${c.rarity === "legend" ? "card-shine" : ""}` : "border-line"
-                }`}
-              >
-                {has ? (
-                  <>
-                    <Image src={c.art} alt={c.title} fill className="object-cover" />
-                    {copies > 1 && (
-                      <span className="absolute right-2 top-2 rounded-full bg-night/85 px-2 py-0.5 font-mono text-xs text-chalk">
-                        x{copies}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 bg-surface">
-                    <span className="text-3xl opacity-40">{c.flag}</span>
-                    <span className="font-mono text-2xl text-muted/50">?</span>
-                  </div>
+              <div key={c.id} className="relative">
+                {has ? <FutCard card={c} size="sm" interactive={false} /> : <LockedSlot card={c} />}
+                {copies > 1 && (
+                  <span className="absolute right-2 top-2 z-10 rounded-full bg-night/85 px-2 py-0.5 font-mono text-xs text-chalk">
+                    x{copies}
+                  </span>
                 )}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night via-night/70 to-transparent p-2.5">
-                  <div className="text-xs font-extrabold uppercase">
-                    {has ? c.title : "Not pulled yet"}
-                  </div>
-                  <div className={`font-mono text-[10px] uppercase ${RARITY_TEXT[c.rarity]}`}>
-                    {c.code} · {RARITY_LABEL[c.rarity]}
-                  </div>
-                </div>
               </div>
             );
           })}
         </div>
-        <p className="mt-3 font-mono text-[11px] leading-relaxed text-muted">
-          GOAL points come from banking Hi-Lo streaks. Cards live in your browser for the demo;
-          on mainnet they mint as compressed NFTs with TxLINE provenance.
+        <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
+          GOAL points come from banking Hi-Lo streaks. Cards live in your browser for the demo; on
+          mainnet they mint as compressed NFTs with TxLINE provenance.
         </p>
-      </div>
+      </section>
+    </div>
+  );
+}
+
+function Stat({
+  icon,
+  tint,
+  label,
+  value,
+}: {
+  icon: "bolt" | "shield" | "crown";
+  tint: "volt" | "cyan" | "gold";
+  label: string;
+  value: string;
+}) {
+  return (
+    <span className="flex items-center gap-2 rounded-full border border-line bg-night/50 py-1.5 pl-1.5 pr-3.5">
+      <GlossyIcon name={icon} tint={tint} size={26} />
+      <span className="leading-tight">
+        <span className="block font-mono text-[9px] uppercase tracking-widest text-muted">
+          {label}
+        </span>
+        <span className="block text-sm font-bold text-chalk">{value}</span>
+      </span>
+    </span>
+  );
+}
+
+function LockedSlot({ card }: { card: CardDef }) {
+  return (
+    <div className="flex aspect-[0.72] w-full flex-col items-center justify-center gap-2 rounded-[9%] border border-dashed border-line bg-surface">
+      <span className="text-3xl opacity-40" aria-hidden>
+        {card.flag}
+      </span>
+      <span className="font-mono text-2xl text-muted/40">?</span>
+      <span className="font-mono text-[10px] uppercase tracking-widest text-muted/60">
+        {card.code} · locked
+      </span>
     </div>
   );
 }
