@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .omc/
+
+# TxLINE service wallet secret (devnet only, never commit)
+.txline/
