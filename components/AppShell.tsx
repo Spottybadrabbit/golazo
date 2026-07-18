@@ -1,0 +1,92 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BallMark } from "@/components/SiteNav";
+import WalletButton from "@/components/WalletButton";
+
+const TABS = [
+  { href: "/play", label: "Play", icon: PlayIcon },
+  { href: "/squad", label: "Squad", icon: SquadIcon },
+  { href: "/pundit", label: "PunditBot", icon: ChatIcon },
+];
+
+/** Shared chrome for app routes: slim top bar + thumb-first bottom tabs. */
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  return (
+    <div className="flex min-h-dvh flex-col">
+      <header className="sticky top-0 z-40 border-b border-line bg-night/85 backdrop-blur-md">
+        <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
+          <Link href="/" className="flex items-center gap-2">
+            <BallMark size={22} />
+            <span className="font-extrabold tracking-tight">GOLAZO</span>
+          </Link>
+          <WalletButton />
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-28 pt-5">{children}</main>
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-3xl items-stretch justify-around">
+          {TABS.map((tab) => {
+            const active = pathname.startsWith(tab.href);
+            const Icon = tab.icon;
+            return (
+              <Link
+                key={tab.href}
+                href={tab.href}
+                className={`relative flex flex-1 flex-col items-center gap-1 py-3 text-xs font-semibold transition-colors ${
+                  active ? "text-chalk" : "text-muted hover:text-chalk"
+                }`}
+              >
+                {active && (
+                  <span className="absolute top-0 h-0.5 w-10 rounded-full bg-scarlet" />
+                )}
+                <Icon active={active} />
+                {tab.label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function PlayIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="8.5" stroke={active ? "#FF4632" : "#8FA0C9"} strokeWidth="2" strokeLinecap="round" />
+      <path d="M11 6.8l3.2 2.4-1.3 3.8H9.1L7.8 9.2 11 6.8z" fill={active ? "#FF4632" : "#8FA0C9"} />
+    </svg>
+  );
+}
+
+function SquadIcon({ active }: { active: boolean }) {
+  const c = active ? "#FF4632" : "#8FA0C9";
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <path d="M4 18v-1.4c0-1.9 2.2-3.1 4.3-3.1s4.2 1.2 4.2 3.1V18" stroke={c} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="8.2" cy="8.6" r="2.9" stroke={c} strokeWidth="2" />
+      <path d="M14.6 13.7c1.9.2 3.9 1.3 3.9 3V18" stroke={c} strokeWidth="2" strokeLinecap="round" />
+      <circle cx="14.9" cy="8.9" r="2.4" stroke={c} strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ChatIcon({ active }: { active: boolean }) {
+  const c = active ? "#FF4632" : "#8FA0C9";
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <path
+        d="M4 6.5A2.5 2.5 0 016.5 4h9A2.5 2.5 0 0118 6.5v6a2.5 2.5 0 01-2.5 2.5H9l-3.6 3v-3H6.5A2.5 2.5 0 014 12.5v-6z"
+        stroke={c}
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <circle cx="8.4" cy="9.6" r="1" fill={c} />
+      <circle cx="11.2" cy="9.6" r="1" fill={c} />
+      <circle cx="14" cy="9.6" r="1" fill={c} />
+    </svg>
+  );
+}

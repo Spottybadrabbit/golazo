@@ -1,26 +1,184 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --night: #081231;
+  --surface: #0e1b45;
+  --raised: #162660;
+  --chalk: #f5f2e8;
+  --muted: #8fa0c9;
+  --scarlet: #ff4632;
+  --scarlet-deep: #d92c1a;
+  --line: rgba(245, 242, 232, 0.13);
+  --up: #59d98f;
+  --down: #ff8577;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-night: var(--night);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-chalk: var(--chalk);
+  --color-muted: var(--muted);
+  --color-scarlet: var(--scarlet);
+  --color-scarlet-deep: var(--scarlet-deep);
+  --color-up: var(--up);
+  --color-down: var(--down);
+  --color-line: var(--line);
+  --font-sans: var(--font-outfit);
+  --font-mono: var(--font-plex-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--night);
+  color: var(--chalk);
+  font-family: var(--font-outfit), system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--scarlet);
+  color: var(--chalk);
+}
+
+.font-mono {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+/* soft radial floodlight glows */
+.floodlight {
+  background:
+    radial-gradient(60% 50% at 20% 0%, rgba(255, 70, 50, 0.08), transparent 60%),
+    radial-gradient(50% 40% at 85% 10%, rgba(245, 242, 232, 0.06), transparent 55%);
+}
+
+/* live pulse dot */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 70, 50, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 7px rgba(255, 70, 50, 0);
+  }
+}
+.live-dot {
+  animation: pulse-dot 1.6s ease-out infinite;
+}
+
+/* ticker marquee */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee 36s linear infinite;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* value flip on tick */
+@keyframes tickflash {
+  0% {
+    background: rgba(255, 70, 50, 0.28);
+  }
+  100% {
+    background: transparent;
+  }
+}
+.tick-flash {
+  animation: tickflash 0.9s ease-out 1;
+}
+
+/* streak flame wobble */
+@keyframes flame {
+  0%,
+  100% {
+    transform: rotate(-4deg) scale(1);
+  }
+  50% {
+    transform: rotate(5deg) scale(1.08);
+  }
+}
+.flame {
+  animation: flame 0.9s ease-in-out infinite;
+  transform-origin: 50% 90%;
+  display: inline-block;
+}
+
+/* confetti burst */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10px) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(70vh) rotate(540deg);
+    opacity: 0;
+  }
+}
+.confetti-piece {
+  position: absolute;
+  top: 0;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti-fall 1.6s cubic-bezier(0.23, 0.7, 0.44, 1) forwards;
+}
+
+/* mascot bob */
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+.bob {
+  animation: bob 3.2s ease-in-out infinite;
+}
+
+/* typing dots */
+@keyframes blink-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+.typing-dot {
+  animation: blink-dot 1.2s infinite;
+}
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .flame,
+  .bob,
+  .live-dot,
+  .typing-dot,
+  .confetti-piece {
+    animation: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
