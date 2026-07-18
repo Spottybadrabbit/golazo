@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Confetti from "@/components/Confetti";
 import { resolveRound, statValue } from "@/lib/engine";
@@ -15,6 +16,7 @@ import {
   savePlayer,
   type PlayerState,
 } from "@/lib/game";
+import { matchSlug } from "@/lib/match";
 import { useLiveWorld, useRoundClock } from "@/lib/useLiveWorld";
 
 type Pick = { roundId: string; choice: 1 | -1 };
@@ -41,7 +43,7 @@ const PUSH_LINES = ["Dead level. Nobody wins, nobody cries. Again!"];
 
 export default function HiLoGame() {
   const world = useLiveWorld();
-  const clock = useRoundClock();
+  const clock = useRoundClock(world?.round ?? null);
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pick, setPick] = useState<Pick | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -135,7 +137,12 @@ export default function HiLoGame() {
             <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
             {m.phase === "LIVE" ? `LIVE ${m.minute}'` : m.phase}
           </span>
-          <span>fixture {m.fixtureId}</span>
+          <Link
+            href={`/match/${matchSlug(m)}`}
+            className="underline-offset-4 hover:text-chalk hover:underline"
+          >
+            fixture {m.fixtureId}
+          </Link>
         </div>
         <div className="mt-3 flex items-center justify-between">
           <TeamBlock flag={m.home.flag} code={m.home.code} />

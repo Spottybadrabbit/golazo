@@ -2,16 +2,23 @@ import { NextResponse } from "next/server";
 import { currentRound } from "@/lib/engine";
 import { getFeed } from "@/lib/feed/adapter";
 
-// Server truth endpoint: the same deterministic engine the client runs,
-// exposed as JSON. A native app, the Telegram bot, or judges can hit this
-// directly. TXLINE_MODE=live swaps the simulator for the real TxLINE feed
-// via lib/feed/adapter.ts; Hi-Lo round timing stays simulator-driven either way.
+// Server truth endpoint. The feed adapter (lib/feed/adapter) decides whether
+// this world comes from the deterministic simulator or the real TxODDS TxLINE
+// devnet feed, keyed on TXLINE_MODE=live. The ENG v FRA marquee (engine.ts) and
+// the Hi-Lo round timing stay simulator-driven either way; only the underlying
+// MatchState data source swaps. See lib/feed/* for the adapter layer.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const feed = getFeed();
+  const headers = { "Cache-Control": "no-store" };
+
   if (feed.mode === "live" && !feed.ready) {
+    // Live requested but the TxLINE pipeline isn't serving yet: say so honestly
+    // (503 + reason) rather than faking it. The client keeps polling.
     return NextResponse.json(
       { mode: feed.mode, ready: false, detail: feed.detail },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      { status: 503, headers },
     );
   }
 
@@ -20,35 +27,15 @@ export async function GET() {
     {
       mode: feed.mode,
       ready: true,
-import { currentRound, liveWorld } from "@/lib/engine";
-import { fetchLiveMarquee, liveConfigured } from "@/lib/txline.server";
-
-// Server truth endpoint: the same deterministic engine the client runs,
-// exposed as JSON. When a TxLINE token is configured (TXLINE_MODE=live), the
-// featured England v France marquee is replaced with the real TxODDS feed;
-// everything else stays on the simulated engine. See lib/txline.server.ts.
-export async function GET() {
-  const world = liveWorld();
-  let mode: "sim" | "live" = "sim";
-  let matches = world.matches;
-
-  if (liveConfigured()) {
-    const live = await fetchLiveMarquee();
-    if (live) {
-      mode = "live";
-      matches = [live, ...world.matches.slice(1)];
-    }
-  }
-
-  return NextResponse.json(
-    {
-      mode,
-      source: mode === "live" ? "TxODDS TxLINE World Cup feed" : "deterministic simulation",
+      source:
+        feed.mode === "live"
+          ? "TxODDS TxLINE World Cup feed"
+          : "deterministic simulation",
       now: world.now,
       nextTickAt: world.nextTickAt,
       marquee: "ENG v FRA",
       round: currentRound(world.now),
-      matches: matches.map((m) => ({
+      matches: world.matches.map((m) => ({
         fixtureId: m.fixtureId,
         home: m.home,
         away: m.away,
@@ -63,6 +50,6 @@ export async function GET() {
         events: m.events.slice(-6),
       })),
     },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers },
   );
 }
