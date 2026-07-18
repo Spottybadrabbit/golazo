@@ -60,7 +60,7 @@ export default function PunditFeed() {
         <div className="min-w-0 flex-1">
           <h1 className="text-lg font-extrabold tracking-tight">Golo · PunditBot</h1>
           <p className="flex items-center gap-2 font-mono text-xs text-muted">
-            <span className="live-dot inline-block h-2 w-2 rounded-full bg-scarlet" />
+            <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
             watching the TxLINE feed for you
           </p>
         </div>
@@ -68,13 +68,13 @@ export default function PunditFeed() {
           href="https://t.me"
           target="_blank"
           rel="noreferrer"
-          className="group flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-bold transition-colors hover:border-scarlet/70 hover:bg-scarlet/10 active:translate-y-px"
+          className="group flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-bold transition-colors hover:border-volt/70 hover:bg-volt/10 active:translate-y-px"
         >
           Open in Telegram
           <span className="flex gap-0.5" aria-hidden="true">
-            <span className="typing-dot h-1 w-1 rounded-full bg-scarlet" />
-            <span className="typing-dot h-1 w-1 rounded-full bg-scarlet" />
-            <span className="typing-dot h-1 w-1 rounded-full bg-scarlet" />
+            <span className="typing-dot h-1 w-1 rounded-full bg-volt" />
+            <span className="typing-dot h-1 w-1 rounded-full bg-volt" />
+            <span className="typing-dot h-1 w-1 rounded-full bg-volt" />
           </span>
         </a>
       </div>
@@ -98,7 +98,7 @@ export default function PunditFeed() {
               <div
                 className={`max-w-[85%] rounded-2xl rounded-bl-md border px-4 py-2.5 text-sm leading-relaxed ${
                   msg.kind === "event"
-                    ? "border-scarlet/50 bg-scarlet/10"
+                    ? "border-volt/50 bg-volt/10"
                     : "border-line bg-surface"
                 }`}
               >

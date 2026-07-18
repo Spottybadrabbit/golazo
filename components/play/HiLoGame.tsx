@@ -132,7 +132,7 @@ export default function HiLoGame() {
       <div className="rounded-2xl border border-line bg-surface p-4">
         <div className="flex items-center justify-between font-mono text-xs text-muted">
           <span className="flex items-center gap-2">
-            <span className="live-dot inline-block h-2 w-2 rounded-full bg-scarlet" />
+            <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
             {m.phase === "LIVE" ? `LIVE ${m.minute}'` : m.phase}
           </span>
           <span>fixture {m.fixtureId}</span>
@@ -190,7 +190,7 @@ export default function HiLoGame() {
               cx="52"
               cy="52"
               r="44"
-              stroke="var(--scarlet)"
+              stroke="var(--volt)"
               strokeWidth="7"
               fill="none"
               strokeLinecap="round"
@@ -207,10 +207,10 @@ export default function HiLoGame() {
             disabled={Boolean(picked)}
             className={`group rounded-xl border-2 py-4 text-lg font-extrabold tracking-wide transition-all active:translate-y-px ${
               picked === 1
-                ? "border-scarlet bg-scarlet text-chalk"
+                ? "border-volt bg-volt text-night"
                 : picked
                   ? "border-line text-muted opacity-50"
-                  : "border-scarlet bg-scarlet/10 text-chalk hover:bg-scarlet hover:shadow-[0_6px_24px_rgba(255,70,50,0.35)]"
+                  : "border-volt bg-volt/10 text-chalk hover:bg-volt hover:text-night hover:shadow-[0_6px_24px_rgba(175,255,0,0.35)]"
             }`}
           >
             HIGHER ↑
@@ -220,10 +220,10 @@ export default function HiLoGame() {
             disabled={Boolean(picked)}
             className={`rounded-xl border-2 py-4 text-lg font-extrabold tracking-wide transition-all active:translate-y-px ${
               picked === -1
-                ? "border-chalk bg-chalk text-night"
+                ? "border-cyan bg-cyan text-night"
                 : picked
                   ? "border-line text-muted opacity-50"
-                  : "border-chalk/70 bg-chalk/5 text-chalk hover:bg-chalk hover:text-night"
+                  : "border-cyan/70 bg-cyan/10 text-chalk hover:bg-cyan hover:text-night hover:shadow-[0_6px_24px_rgba(0,212,255,0.3)]"
             }`}
           >
             LOWER ↓
@@ -272,7 +272,7 @@ export default function HiLoGame() {
           <div className="text-3xl font-extrabold">{level(player.xp)}</div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-night">
             <div
-              className="h-full rounded-full bg-scarlet transition-all duration-700"
+              className="h-full rounded-full bg-volt transition-all duration-700"
               style={{ width: `${Math.round(levelProgress(player.xp) * 100)}%` }}
             />
           </div>
@@ -292,7 +292,7 @@ export default function HiLoGame() {
       {player.streak >= 3 && (
         <button
           onClick={bank}
-          className="mt-4 w-full rounded-2xl border-2 border-dashed border-scarlet/70 bg-scarlet/10 py-4 text-center font-bold text-chalk transition-colors hover:bg-scarlet/20 active:translate-y-px"
+          className="mt-4 w-full rounded-2xl border-2 border-dashed border-volt/70 bg-volt/10 py-4 text-center font-bold text-chalk transition-colors hover:bg-volt/20 active:translate-y-px"
         >
           Bank this streak for {player.streak * 25 * mult} GOAL
           <span className="ml-2 font-mono text-xs font-normal text-muted">
@@ -311,7 +311,7 @@ export default function HiLoGame() {
               <div
                 key={b.id}
                 className={`rounded-xl border p-3 ${
-                  earned ? "border-scarlet/60 bg-scarlet/10" : "border-line bg-surface opacity-60"
+                  earned ? "border-volt/60 bg-volt/10" : "border-line bg-surface opacity-60"
                 }`}
               >
                 <div className="text-sm font-bold">{b.name}</div>

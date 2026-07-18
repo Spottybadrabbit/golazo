@@ -77,11 +77,11 @@ export default function SquadBoard() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && join()}
               placeholder="YourHandle"
-              className="min-w-0 flex-1 rounded-xl border border-line bg-night px-4 py-3 font-mono text-sm text-chalk placeholder:text-muted/60 focus:border-scarlet focus:outline-none"
+              className="min-w-0 flex-1 rounded-xl border border-line bg-night px-4 py-3 font-mono text-sm text-chalk placeholder:text-muted/60 focus:border-volt focus:outline-none"
             />
             <button
               onClick={join}
-              className="rounded-xl bg-scarlet px-5 py-3 font-bold text-chalk transition-transform hover:scale-[1.02] active:translate-y-px"
+              className="rounded-xl bg-volt px-5 py-3 font-bold text-night transition-transform hover:scale-[1.02] active:translate-y-px"
             >
               Join the squad
             </button>
@@ -106,18 +106,18 @@ export default function SquadBoard() {
             <div
               key={s.handle}
               className={`grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 border-b border-line/60 px-4 py-3 last:border-0 ${
-                s.isUser ? "bg-scarlet/10" : ""
+                s.isUser ? "bg-volt/10" : ""
               }`}
             >
               <span
-                className={`font-mono text-sm ${i === 0 ? "text-scarlet" : "text-muted"}`}
+                className={`font-mono text-sm ${i === 0 ? "text-volt" : "text-muted"}`}
               >
                 {i + 1}
               </span>
               <span className="min-w-0">
                 <span className="block truncate font-bold">
                   {s.handle}
-                  {s.isUser && <span className="ml-2 font-mono text-[11px] text-scarlet">you</span>}
+                  {s.isUser && <span className="ml-2 font-mono text-[11px] text-volt">you</span>}
                 </span>
                 <span className="font-mono text-xs text-muted">
                   {s.teams.map((t) => `${t.flag} ${t.code}`).join("  ")}

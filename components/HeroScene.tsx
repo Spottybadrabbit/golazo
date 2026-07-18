@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 /**
- * The GOLAZO match ball: a chalk-line wireframe sphere with a scarlet core
+ * The GOLAZO match ball: a chalk-line wireframe sphere with a volt core
  * and a confetti dust field. Responds to pointer (tilt) and scroll (spin).
  * Renders a single static frame under prefers-reduced-motion.
  */
@@ -31,27 +31,27 @@ export default function HeroScene() {
     const shellGeo = new THREE.IcosahedronGeometry(2.5, 1);
     const shell = new THREE.LineSegments(
       new THREE.WireframeGeometry(shellGeo),
-      new THREE.LineBasicMaterial({ color: 0xf5f2e8, transparent: true, opacity: 0.62 }),
+      new THREE.LineBasicMaterial({ color: 0xf7f7f4, transparent: true, opacity: 0.62 }),
     );
     group.add(shell);
 
-    // inner scarlet core
+    // inner volt core
     const core = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.15, 2),
-      new THREE.MeshBasicMaterial({ color: 0xff4632, transparent: true, opacity: 0.9 }),
+      new THREE.MeshBasicMaterial({ color: 0xafff00, transparent: true, opacity: 0.9 }),
     );
     group.add(core);
 
     const glow = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.55, 2),
-      new THREE.MeshBasicMaterial({ color: 0xff4632, transparent: true, opacity: 0.16 }),
+      new THREE.MeshBasicMaterial({ color: 0xafff00, transparent: true, opacity: 0.16 }),
     );
     group.add(glow);
 
     // orbit ring, tilted like a chalk center circle
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(3.4, 0.012, 8, 96),
-      new THREE.MeshBasicMaterial({ color: 0xf5f2e8, transparent: true, opacity: 0.35 }),
+      new THREE.MeshBasicMaterial({ color: 0xf7f7f4, transparent: true, opacity: 0.35 }),
     );
     ring.rotation.x = Math.PI / 2.4;
     group.add(ring);
@@ -71,7 +71,7 @@ export default function HeroScene() {
     dustGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     const dust = new THREE.Points(
       dustGeo,
-      new THREE.PointsMaterial({ color: 0x8fa0c9, size: 0.035, transparent: true, opacity: 0.8 }),
+      new THREE.PointsMaterial({ color: 0x00d4ff, size: 0.035, transparent: true, opacity: 0.55 }),
     );
     scene.add(dust);
 

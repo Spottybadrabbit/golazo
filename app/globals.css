@@ -1,16 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --night: #081231;
-  --surface: #0e1b45;
-  --raised: #162660;
-  --chalk: #f5f2e8;
-  --muted: #8fa0c9;
-  --scarlet: #ff4632;
-  --scarlet-deep: #d92c1a;
-  --line: rgba(245, 242, 232, 0.13);
-  --up: #59d98f;
-  --down: #ff8577;
+  --night: #0a0a0a;
+  --surface: #141414;
+  --raised: #1d1d1d;
+  --chalk: #f7f7f4;
+  --muted: #9a9a92;
+  --volt: #afff00;
+  --volt-deep: #86cc00;
+  --cyan: #00d4ff;
+  --ember: #ff6b35;
+  --line: rgba(247, 247, 244, 0.12);
+  --up: #afff00;
+  --down: #ff6b35;
 }
 
 @theme inline {
@@ -19,8 +21,10 @@
   --color-raised: var(--raised);
   --color-chalk: var(--chalk);
   --color-muted: var(--muted);
-  --color-scarlet: var(--scarlet);
-  --color-scarlet-deep: var(--scarlet-deep);
+  --color-volt: var(--volt);
+  --color-volt-deep: var(--volt-deep);
+  --color-cyan: var(--cyan);
+  --color-ember: var(--ember);
   --color-up: var(--up);
   --color-down: var(--down);
   --color-line: var(--line);
@@ -40,29 +44,29 @@ body {
 }
 
 ::selection {
-  background: var(--scarlet);
-  color: var(--chalk);
+  background: var(--volt);
+  color: var(--night);
 }
 
 .font-mono {
   font-family: var(--font-plex-mono), ui-monospace, monospace;
 }
 
-/* soft radial floodlight glows */
+/* volt floodlight glows */
 .floodlight {
   background:
-    radial-gradient(60% 50% at 20% 0%, rgba(255, 70, 50, 0.08), transparent 60%),
-    radial-gradient(50% 40% at 85% 10%, rgba(245, 242, 232, 0.06), transparent 55%);
+    radial-gradient(60% 50% at 20% 0%, rgba(175, 255, 0, 0.07), transparent 60%),
+    radial-gradient(50% 40% at 85% 10%, rgba(0, 212, 255, 0.05), transparent 55%);
 }
 
 /* live pulse dot */
 @keyframes pulse-dot {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 70, 50, 0.55);
+    box-shadow: 0 0 0 0 rgba(175, 255, 0, 0.55);
   }
   60% {
-    box-shadow: 0 0 0 7px rgba(255, 70, 50, 0);
+    box-shadow: 0 0 0 7px rgba(175, 255, 0, 0);
   }
 }
 .live-dot {
@@ -85,10 +89,18 @@ body {
   animation-play-state: paused;
 }
 
+/* drops ticker, faster */
+.marquee-fast {
+  animation: marquee 22s linear infinite;
+}
+.marquee-fast:hover {
+  animation-play-state: paused;
+}
+
 /* value flip on tick */
 @keyframes tickflash {
   0% {
-    background: rgba(255, 70, 50, 0.28);
+    background: rgba(175, 255, 0, 0.25);
   }
   100% {
     background: transparent;
@@ -169,14 +181,70 @@ body {
   animation-delay: 0.3s;
 }
 
+/* card shine sweep */
+@keyframes shine {
+  from {
+    transform: translateX(-130%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(230%) skewX(-18deg);
+  }
+}
+.card-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  background: linear-gradient(100deg, transparent, rgba(247, 247, 244, 0.22), transparent);
+  animation: shine 2.6s ease-in-out infinite;
+}
+
+/* pack glow pulse */
+@keyframes packglow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 18px rgba(175, 255, 0, 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 40px rgba(175, 255, 0, 0.65));
+  }
+}
+.pack-glow {
+  animation: packglow 2.4s ease-in-out infinite;
+}
+
+/* card flip */
+.flip-scene {
+  perspective: 1200px;
+}
+.flip-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.flip-inner.flipped {
+  transform: rotateY(180deg);
+}
+.flip-face {
+  backface-visibility: hidden;
+}
+.flip-back {
+  transform: rotateY(180deg);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marquee-track,
+  .marquee-fast,
   .flame,
   .bob,
   .live-dot,
   .typing-dot,
-  .confetti-piece {
+  .confetti-piece,
+  .card-shine::after,
+  .pack-glow {
     animation: none !important;
+  }
+  .flip-inner {
+    transition: none;
   }
   html {
     scroll-behavior: auto;

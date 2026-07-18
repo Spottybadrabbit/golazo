@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const COLORS = ["#ff4632", "#f5f2e8", "#8fa0c9", "#ffd166", "#59d98f"];
+const COLORS = ["#afff00", "#f7f7f4", "#00d4ff", "#ff6b35", "#9a9a92"];
 
 /** Confetti burst; retriggers whenever `burst` changes to a new truthy value. */
 export default function Confetti({ burst }: { burst: number }) {

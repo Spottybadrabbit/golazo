@@ -15,6 +15,7 @@ export interface PlayerState {
   badges: string[];
   wallet: string | null;
   lastRoundId: string | null;
+  cards: Record<string, number>; // card id -> copies owned
 }
 
 const KEY = "golazo.player.v1";
@@ -30,6 +31,7 @@ export const FRESH: PlayerState = {
   badges: [],
   wallet: null,
   lastRoundId: null,
+  cards: {},
 };
 
 export function loadPlayer(): PlayerState {
@@ -80,6 +82,18 @@ export const BADGES: Badge[] = [
   { id: "run8", name: "Golazo God", desc: "8 streak, 5x boost", earned: (p) => p.bestStreak >= 8 },
   { id: "vol20", name: "Regular", desc: "20 calls made", earned: (p) => p.picks >= 20 },
   { id: "bank", name: "Banker", desc: "Banked a boosted streak", earned: (p) => p.goalPoints > 120 },
+  {
+    id: "collector",
+    name: "Collector",
+    desc: "First card pulled",
+    earned: (p) => Object.keys(p.cards ?? {}).length >= 1,
+  },
+  {
+    id: "fullhouse",
+    name: "Full House",
+    desc: "Whole collection owned",
+    earned: (p) => Object.keys(p.cards ?? {}).length >= 5,
+  },
 ];
 
 /** Apply a resolved pick; returns the updated state plus what happened. */

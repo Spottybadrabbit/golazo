@@ -31,12 +31,12 @@ export default function LiveTicker() {
     <div className="relative overflow-hidden border-y border-line bg-surface/70 py-2.5">
       <div className="marquee-track flex w-max items-center gap-12 whitespace-nowrap font-mono text-xs tracking-wide text-muted">
         <span className="flex items-center gap-3">
-          <span className="live-dot inline-block h-2 w-2 rounded-full bg-scarlet" />
+          <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
           <span className="text-chalk">TxLINE</span>
           {row}
         </span>
         <span aria-hidden="true" className="flex items-center gap-3">
-          <span className="live-dot inline-block h-2 w-2 rounded-full bg-scarlet" />
+          <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
           <span className="text-chalk">TxLINE</span>
           {row}
         </span>

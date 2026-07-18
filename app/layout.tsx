@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Outfit, IBM_Plex_Mono } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
+import ConvexClientProvider from "@/components/ConvexClientProvider";
 import "./globals.css";
+
+const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 const outfit = Outfit({
   variable: "--font-outfit",
@@ -33,7 +37,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#081231",
+  themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({
@@ -41,11 +45,29 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
+  const body = (
     <html lang="en">
       <body className={`${outfit.variable} ${plexMono.variable} antialiased`}>
-        {children}
+        <ConvexClientProvider>{children}</ConvexClientProvider>
       </body>
     </html>
+  );
+
+  if (!clerkEnabled) return body;
+
+  return (
+    <ClerkProvider
+      appearance={{
+        variables: {
+          colorPrimary: "#afff00",
+          colorBackground: "#0a0a0a",
+          colorForeground: "#f7f7f4",
+          colorInput: "#141414",
+          borderRadius: "0.75rem",
+        },
+      }}
+    >
+      {body}
+    </ClerkProvider>
   );
 }

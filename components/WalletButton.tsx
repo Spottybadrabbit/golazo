@@ -32,7 +32,7 @@ export default function WalletButton() {
   return (
     <button
       onClick={connect}
-      className="group flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 font-mono text-xs text-chalk transition-colors hover:border-scarlet/60 active:translate-y-px"
+      className="group flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 font-mono text-xs text-chalk transition-colors hover:border-volt/60 active:translate-y-px"
       title="Demo wallet, no real transactions"
     >
       <span
