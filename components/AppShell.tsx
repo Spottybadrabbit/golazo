@@ -7,9 +7,10 @@ import AuthButton from "@/components/AuthButton";
 
 const TABS = [
   { href: "/play", label: "Play", icon: PlayIcon },
+  { href: "/matches", label: "Matches", icon: MatchIcon },
   { href: "/cards", label: "Cards", icon: CardsIcon },
   { href: "/squad", label: "Squad", icon: SquadIcon },
-  { href: "/pundit", label: "PunditBot", icon: ChatIcon },
+  { href: "/pundit", label: "Pundit", icon: ChatIcon },
 ];
 
 /** Shared chrome for app routes: slim top bar + thumb-first bottom tabs. */
@@ -59,6 +60,17 @@ function PlayIcon({ active }: { active: boolean }) {
     <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
       <circle cx="11" cy="11" r="8.5" stroke={active ? "#AFFF00" : "#9A9A92"} strokeWidth="2" strokeLinecap="round" />
       <path d="M11 6.8l3.2 2.4-1.3 3.8H9.1L7.8 9.2 11 6.8z" fill={active ? "#AFFF00" : "#9A9A92"} />
+    </svg>
+  );
+}
+
+function MatchIcon({ active }: { active: boolean }) {
+  const c = active ? "#AFFF00" : "#9A9A92";
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <circle cx="11" cy="11" r="8.5" stroke={c} strokeWidth="2" />
+      <path d="M11 4.2v13.6M4.2 11h13.6" stroke={c} strokeWidth="1.3" opacity="0.5" />
+      <path d="M11 8.4l2.5 1.8-1 3h-3l-1-3L11 8.4z" fill={c} />
     </svg>
   );
 }
