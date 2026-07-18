@@ -62,10 +62,39 @@ export default function RootLayout({
       appearance={{
         variables: {
           colorPrimary: "#afff00",
-          colorBackground: "#0a0a0a",
+          colorPrimaryForeground: "#0a0a0a",
+          // Card sits one step above pure black so the wallet buttons on top
+          // of it read as distinct surfaces instead of vanishing into the bg.
+          colorBackground: "#151515",
           colorForeground: "#f7f7f4",
-          colorInput: "#141414",
+          colorMuted: "#1c1c1c",
+          colorMutedForeground: "#b8b8b0",
+          colorInput: "#1f1f1f",
+          colorInputForeground: "#f7f7f4",
+          colorNeutral: "#f7f7f4",
+          // A clearly visible border — the old config left this at the faint
+          // default, which is why the Phantom / MetaMask buttons disappeared.
+          colorBorder: "rgba(247, 247, 244, 0.32)",
+          colorRing: "#afff00",
           borderRadius: "0.75rem",
+        },
+        elements: {
+          // Give the wallet / social connection buttons a solid, high-contrast
+          // surface with a bright border and light label so they're obvious.
+          socialButtonsBlockButton:
+            "border border-[rgba(247,247,244,0.32)] bg-[#1f1f1f] text-[#f7f7f4] transition-colors hover:bg-[#2a2a2a] hover:border-[#afff00]",
+          socialButtonsBlockButtonText: "text-[#f7f7f4] font-semibold",
+          socialButtonsProviderIcon: "opacity-100",
+          dividerLine: "bg-[rgba(247,247,244,0.18)]",
+          dividerText: "text-[#b8b8b0]",
+          formFieldInput:
+            "border border-[rgba(247,247,244,0.32)] bg-[#1f1f1f] text-[#f7f7f4]",
+          headerTitle: "text-[#f7f7f4]",
+          headerSubtitle: "text-[#b8b8b0]",
+          formButtonPrimary:
+            "bg-[#afff00] text-[#0a0a0a] font-bold hover:bg-[#86cc00]",
+          footerActionLink: "text-[#afff00] hover:text-[#86cc00]",
+          backLink: "text-[#afff00] hover:text-[#86cc00]",
         },
       }}
     >
