@@ -80,7 +80,10 @@ const PRICING_MATRIX_SEED = "pricing_matrix";
 const TOKEN_TREASURY_SEED = "token_treasury_v2";
 
 const FREE_TIER_SERVICE_LEVEL_ID = 1;
-const WEEKS = 1;
+// The deployed txoracle program enforces weeks % 4 == 0 (on-chain error
+// InvalidWeeks/6041 "Weeks must be a multiple of 4"), even though the vendored
+// IDL's static text only says "greater than zero". Smallest valid term = 4.
+const WEEKS = 4;
 
 function loadServiceWallet() {
   const spec = process.env.TXLINE_SERVICE_WALLET || ".txline/service-wallet.json";
@@ -345,7 +348,13 @@ async function main() {
     }
     await new Promise((resolve) => {
       const url = `${API_ORIGIN}${path}`;
-      const es = new EventSource(url, { headers: authHeaders });
+      // eventsource v4 dropped the top-level `headers` option: custom headers
+      // must be injected through a fetch override, else the request goes out
+      // unauthenticated and the server returns 401 "Invalid or expired guest JWT".
+      const es = new EventSource(url, {
+        fetch: (input, init) =>
+          fetch(input, { ...init, headers: { ...init.headers, ...authHeaders } }),
+      });
       let opened = false;
       let eventsSeen = 0;
       const timeout = setTimeout(() => {
