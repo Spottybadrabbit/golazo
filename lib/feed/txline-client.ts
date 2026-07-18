@@ -162,14 +162,18 @@ interface SoccerScoreApi {
   Corners?: number;
 }
 
+// The live scores stream is PascalCase on the wire (verified against a real
+// frame: {"FixtureId":...,"GameState":...,"Participant1IsHome":...,"StartTime":...}),
+// matching FixtureApi/OddsFrame. (An earlier camelCase guess silently dropped
+// every frame, so `ready` never flipped.)
 interface ScoresFrame {
-  fixtureId?: number;
-  gameState?: string;
-  startTime?: number;
-  ts?: number;
-  seq?: number;
-  participant1IsHome?: boolean;
-  scoreSoccer?: {
+  FixtureId?: number;
+  GameState?: string;
+  StartTime?: number;
+  Ts?: number;
+  Seq?: number;
+  Participant1IsHome?: boolean;
+  ScoreSoccer?: {
     Total?: {
       Participant1?: SoccerScoreApi;
       Participant2?: SoccerScoreApi;
@@ -208,9 +212,22 @@ class TxlineClient {
     });
   }
 
+  private hasData(): boolean {
+    return (
+      this.fixturesById.size > 0 ||
+      this.scoresByFixture.size > 0 ||
+      this.oddsByFixture.size > 0
+    );
+  }
+
   isReady(): boolean {
     this.ensureStarted();
-    return this.status === "ready" && this.scoresFrameCount > 0;
+    // Ready once the pipeline is up AND we actually hold data to serve. We do
+    // NOT require a scores *stream* frame: per the TxLINE docs these are World
+    // Cup / Int'l Friendlies fixtures, many still "scheduled", so the scores
+    // stream mostly emits heartbeats. Gating on a scores frame would keep the
+    // feed dark even though the fixtures snapshot (+ odds) is already loaded.
+    return this.status === "ready" && this.hasData();
   }
 
   statusDetail(): string {
@@ -220,8 +237,8 @@ class TxlineClient {
     if (this.status === "idle" || this.status === "connecting") {
       return "TxLINE live feed is connecting (subscribe -> guest JWT -> activate -> SSE)...";
     }
-    if (this.scoresFrameCount === 0) {
-      return "TxLINE live feed connected but hasn't received a scores frame yet.";
+    if (!this.hasData()) {
+      return "TxLINE live feed connected but no fixtures/odds/scores loaded yet.";
     }
     return "ready";
   }
@@ -420,8 +437,8 @@ class TxlineClient {
   private ingestScoresFrame(raw: unknown): void {
     if (!raw || typeof raw !== "object") return;
     const s = raw as ScoresFrame;
-    if (typeof s.fixtureId !== "number") return;
-    this.scoresByFixture.set(s.fixtureId, s);
+    if (typeof s.FixtureId !== "number") return;
+    this.scoresByFixture.set(s.FixtureId, s);
     this.scoresFrameCount += 1;
   }
 
@@ -434,7 +451,15 @@ class TxlineClient {
 
   getLiveWorld(): LiveWorld {
     const now = Date.now();
-    const fixtureIds = new Set<number>([...this.scoresByFixture.keys(), ...this.oddsByFixture.keys()]);
+    // Build one match per fixture we know about from ANY source — the
+    // fixtures snapshot is the baseline roster; scores/odds stream frames
+    // enrich those matches as they arrive (rather than being the only source,
+    // which left the list empty while scheduled fixtures only sent heartbeats).
+    const fixtureIds = new Set<number>([
+      ...this.fixturesById.keys(),
+      ...this.scoresByFixture.keys(),
+      ...this.oddsByFixture.keys(),
+    ]);
     const matches: MatchState[] = Array.from(fixtureIds).map((fixtureId, idx) =>
       this.buildMatchState(fixtureId, idx, now),
     );
@@ -456,13 +481,13 @@ class TxlineClient {
     const odds = this.oddsByFixture.get(fixtureId);
     const fixture = this.fixturesById.get(fixtureId);
 
-    const isP1Home = scores?.participant1IsHome ?? fixture?.participant1IsHome ?? true;
+    const isP1Home = scores?.Participant1IsHome ?? fixture?.participant1IsHome ?? true;
     const p1Name = fixture?.participant1 ?? `Team ${fixtureId}-1`;
     const p2Name = fixture?.participant2 ?? `Team ${fixtureId}-2`;
     const home = teamFromName(isP1Home ? p1Name : p2Name);
     const away = teamFromName(isP1Home ? p2Name : p1Name);
 
-    const total = scores?.scoreSoccer?.Total;
+    const total = scores?.ScoreSoccer?.Total;
     const p1 = total?.Participant1;
     const p2 = total?.Participant2;
     const homeRaw = isP1Home ? p1 : p2;
@@ -482,7 +507,7 @@ class TxlineClient {
       home,
       away,
       minute: deriveMinute(scores, now),
-      phase: derivePhase(scores?.gameState),
+      phase: derivePhase(scores?.GameState),
       score,
       stats,
       probs,
@@ -492,7 +517,7 @@ class TxlineClient {
       // TODO: TxLINE doesn't expose discrete match events on this stream;
       // left empty rather than fabricated.
       events: [],
-      sequence: scores?.seq ?? 0,
+      sequence: scores?.Seq ?? 0,
     };
   }
 }
@@ -519,11 +544,11 @@ function sideStatsFrom(raw: SoccerScoreApi | undefined): SideStats {
 }
 
 function deriveMinute(scores: ScoresFrame | undefined, now: number): number {
-  if (!scores?.startTime) return 0;
-  // TODO: assuming startTime/ts are epoch-millis (unverified against a live
+  if (!scores?.StartTime) return 0;
+  // TODO: assuming StartTime/Ts are epoch-millis (unverified against a live
   // payload — the OpenAPI spec only says "format: int64").
-  const referenceTs = scores.ts ?? now;
-  const elapsedMs = Math.max(0, referenceTs - scores.startTime);
+  const referenceTs = scores.Ts ?? now;
+  const elapsedMs = Math.max(0, referenceTs - scores.StartTime);
   return Math.min(120, Math.round(elapsedMs / 60_000));
 }
 
