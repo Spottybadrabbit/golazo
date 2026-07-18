@@ -99,7 +99,14 @@ export interface MatchState {
 
 // ---------- fixture selection ----------
 
+// The marquee slot is always England v France, so it anchors the live demo
+// card, the Hi-Lo game, PunditBot, and the Match Centre. Every function that
+// simulates this slot resolves the same fixture, keeping the game consistent.
+export const MARQUEE_SLOT = 2;
+export const MARQUEE = ["ENG", "FRA"] as const;
+
 function fixtureTeams(cycle: number, slot: number): [Team, Team] {
+  if (slot === MARQUEE_SLOT) return [team(MARQUEE[0]), team(MARQUEE[1])];
   const r = mulberry32(hash(cycle, slot, 7));
   const a = Math.floor(r() * TEAMS.length);
   let b = Math.floor(r() * (TEAMS.length - 1));
@@ -109,12 +116,6 @@ function fixtureTeams(cycle: number, slot: number): [Team, Team] {
 
 export function team(code: string): Team {
   return TEAMS.find((t) => t.code === code) ?? TEAMS[0];
-}
-
-/** A team that isn't `code`, chosen deterministically by seed. */
-function opponentFor(code: string, seed: number): Team {
-  const pool = TEAMS.filter((t) => t.code !== code);
-  return pool[Math.floor(mulberry32(seed)() * pool.length)];
 }
 
 // ---------- core simulation ----------
@@ -267,41 +268,39 @@ export interface LiveWorld {
   nextTickAt: number;
 }
 
-const SLOTS = 2;
+const SLOTS = 2; // supporting fixtures alongside the marquee
 
 function slotPosition(now: number, slot: number) {
-  const offset = slot * (CYCLE_MS / SLOTS);
+  const offset = slot * 9 * TICK_MS; // stagger fixtures so they run out of phase
   const elapsed = now - EPOCH + offset;
   const cycle = Math.floor(elapsed / CYCLE_MS);
   const tick = Math.floor((elapsed % CYCLE_MS) / TICK_MS);
   return { cycle, tick };
 }
 
+/** The always-on England v France marquee, live via the deterministic engine. */
+export function marqueeMatch(now: number = Date.now()): MatchState {
+  const { cycle, tick } = slotPosition(now, MARQUEE_SLOT);
+  return simulate(cycle, MARQUEE_SLOT, tick);
+}
+
 export function liveWorld(now: number = Date.now()): LiveWorld {
-  const matches = Array.from({ length: SLOTS }, (_, slot) => {
+  const marquee = marqueeMatch(now);
+  const others = Array.from({ length: SLOTS }, (_, slot) => {
     const { cycle, tick } = slotPosition(now, slot);
     return simulate(cycle, slot, tick);
   });
-  // featured = the live match deepest into play; fall back to any
-  const live = matches.filter((m) => m.phase === "LIVE");
-  const featured = (live.length ? live : matches).sort((a, b) => b.minute - a.minute)[0];
+  // The England v France marquee is always the featured game.
+  const matches = [marquee, ...others];
   const sincePeriod = (now - EPOCH) % TICK_MS;
-  return { now, matches, featured, nextTickAt: now + (TICK_MS - sincePeriod) };
+  return { now, matches, featured: marquee, nextTickAt: now + (TICK_MS - sincePeriod) };
 }
 
 // ---------- match centre ----------
 
-const ENGLAND_SLOT = 5;
-
-/**
- * The marquee live game, always featuring England vs a daily rival. Runs on the
- * same deterministic engine as the rest of the feed, on its own slot phase.
- */
+/** Alias kept for the Match Centre: the marquee is the England game. */
 export function englandMatch(now: number = Date.now()): MatchState {
-  const { cycle, tick } = slotPosition(now, ENGLAND_SLOT);
-  const eng = team("ENG");
-  const rival = opponentFor("ENG", hash(cycle, ENGLAND_SLOT, 61));
-  return simulate(cycle, ENGLAND_SLOT, tick, [eng, rival]);
+  return marqueeMatch(now);
 }
 
 export interface Fixture {
@@ -310,33 +309,42 @@ export interface Fixture {
   away: Team;
   time: string; // clean HH:00 kickoff label
   group: string;
+  featured?: boolean; // the England v France headliner
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GROUPS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+const PRIME_INDEX = 4; // 20:00 evening headliner slot
 
-/** Deterministic slate of tomorrow's fixtures, each team appearing once. */
+/**
+ * Deterministic slate of tomorrow's fixtures. England v France is the pinned
+ * headliner in the prime evening slot; the rest are drawn from the other
+ * nations, each appearing once.
+ */
 export function tomorrowFixtures(now: number = Date.now(), count = 6): Fixture[] {
   const dayIndex = Math.floor((now - EPOCH) / DAY_MS) + 1; // tomorrow
-  // Fisher-Yates shuffle of the team pool, seeded on the day
-  const pool = [...TEAMS];
+  // shuffle the non-marquee nations, seeded on the day
+  const pool = TEAMS.filter((t) => !MARQUEE.includes(t.code as (typeof MARQUEE)[number]));
   const r = mulberry32(hash(dayIndex, 71));
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(r() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
   }
   const fixtures: Fixture[] = [];
-  const n = Math.min(count, Math.floor(pool.length / 2));
-  for (let i = 0; i < n; i++) {
-    const home = pool[i * 2];
-    const away = pool[i * 2 + 1];
+  let p = 0;
+  for (let i = 0; i < count; i++) {
     const hour = 12 + i * 2; // 12:00, 14:00, 16:00 ...
+    const isPrime = i === PRIME_INDEX;
+    const home = isPrime ? team(MARQUEE[0]) : pool[p++];
+    const away = isPrime ? team(MARQUEE[1]) : pool[p++];
+    if (!home || !away) break;
     fixtures.push({
-      fixtureId: 18_180_000 + dayIndex * 100 + i,
+      fixtureId: isPrime ? 18_180_099 : 18_180_000 + dayIndex * 100 + i,
       home,
       away,
       time: `${String(hour).padStart(2, "0")}:00`,
-      group: GROUPS[i % GROUPS.length],
+      group: isPrime ? "D" : GROUPS[i % GROUPS.length],
+      featured: isPrime,
     });
   }
   return fixtures;

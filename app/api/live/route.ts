@@ -1,18 +1,33 @@
 import { NextResponse } from "next/server";
 import { currentRound, liveWorld } from "@/lib/engine";
+import { fetchLiveMarquee, liveConfigured } from "@/lib/txline.server";
 
 // Server truth endpoint: the same deterministic engine the client runs,
-// exposed as JSON. A native app, the Telegram bot, or judges can hit this
-// directly. Swap in the real TxLINE adapter here for live mode.
-export function GET() {
+// exposed as JSON. When a TxLINE token is configured (TXLINE_MODE=live), the
+// featured England v France marquee is replaced with the real TxODDS feed;
+// everything else stays on the simulated engine. See lib/txline.server.ts.
+export async function GET() {
   const world = liveWorld();
+  let mode: "sim" | "live" = "sim";
+  let matches = world.matches;
+
+  if (liveConfigured()) {
+    const live = await fetchLiveMarquee();
+    if (live) {
+      mode = "live";
+      matches = [live, ...world.matches.slice(1)];
+    }
+  }
+
   return NextResponse.json(
     {
-      mode: process.env.TXLINE_MODE ?? "sim",
+      mode,
+      source: mode === "live" ? "TxODDS TxLINE World Cup feed" : "deterministic simulation",
       now: world.now,
       nextTickAt: world.nextTickAt,
+      marquee: "ENG v FRA",
       round: currentRound(world.now),
-      matches: world.matches.map((m) => ({
+      matches: matches.map((m) => ({
         fixtureId: m.fixtureId,
         home: m.home,
         away: m.away,

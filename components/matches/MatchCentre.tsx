@@ -260,10 +260,18 @@ function Tomorrow() {
           <div
             key={f.fixtureId}
             data-fx
-            className="flex items-center justify-between rounded-2xl border border-line bg-surface p-4"
+            className={`flex items-center justify-between rounded-2xl border p-4 ${
+              f.featured
+                ? "border-volt bg-volt/10 shadow-[0_0_24px_rgba(175,255,0,0.18)]"
+                : "border-line bg-surface"
+            }`}
           >
             <div className="flex min-w-0 items-center gap-3">
-              <span className="rounded-md bg-night px-2 py-1 font-mono text-[11px] text-muted">
+              <span
+                className={`rounded-md px-2 py-1 font-mono text-[11px] ${
+                  f.featured ? "bg-volt text-night" : "bg-night text-muted"
+                }`}
+              >
                 {f.time}
               </span>
               <span className="truncate font-bold">
@@ -272,9 +280,15 @@ function Tomorrow() {
                 {f.away.code} {f.away.flag}
               </span>
             </div>
-            <span className="font-mono text-[11px] uppercase tracking-widest text-muted">
-              Grp {f.group}
-            </span>
+            {f.featured ? (
+              <span className="shrink-0 font-mono text-[10px] font-bold uppercase tracking-widest text-volt">
+                Headliner
+              </span>
+            ) : (
+              <span className="font-mono text-[11px] uppercase tracking-widest text-muted">
+                Grp {f.group}
+              </span>
+            )}
           </div>
         ))}
       </div>
