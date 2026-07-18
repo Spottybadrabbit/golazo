@@ -16,14 +16,17 @@ export async function GET() {
   }
 
   const world = await feed.getWorld();
+  const matches = world.matches;
   return NextResponse.json(
     {
       mode: feed.mode,
       ready: true,
+      source: feed.mode === "live" ? "TxODDS TxLINE World Cup feed" : "deterministic simulation",
       now: world.now,
       nextTickAt: world.nextTickAt,
+      marquee: "ENG v FRA",
       round: currentRound(world.now),
-      matches: world.matches.map((m) => ({
+      matches: matches.map((m) => ({
         fixtureId: m.fixtureId,
         home: m.home,
         away: m.away,

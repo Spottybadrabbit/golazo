@@ -6,7 +6,7 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
-import HeroScene from "@/components/HeroScene";
+import HeroMascot from "@/components/HeroMascot";
 import LiveTicker from "@/components/LiveTicker";
 import SiteNav from "@/components/SiteNav";
 import { CARDS } from "@/lib/cards";
@@ -184,7 +184,7 @@ function Hero() {
         </div>
 
         <div data-hero-ball className="relative h-[46vh] min-h-72 will-change-transform lg:h-[64vh]">
-          <HeroScene />
+          <HeroMascot />
         </div>
       </div>
     </section>

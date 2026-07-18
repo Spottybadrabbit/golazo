@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import AuthButton from "@/components/AuthButton";
 
@@ -15,6 +16,12 @@ export default function SiteNav() {
         <div className="hidden items-center gap-7 text-sm text-muted md:flex">
           <Link href="/play" className="transition-colors hover:text-chalk">
             Play
+          </Link>
+          <Link href="/matches" className="transition-colors hover:text-chalk">
+            Matches
+          </Link>
+          <Link href="/cards" className="transition-colors hover:text-chalk">
+            Cards
           </Link>
           <Link href="/squad" className="transition-colors hover:text-chalk">
             Squad
@@ -37,18 +44,16 @@ export default function SiteNav() {
   );
 }
 
-/** Inline chalk ball monogram. */
-export function BallMark({ size = 26 }: { size?: number }) {
+/** Golo mascot mark, used as the logo throughout. */
+export function BallMark({ size = 30 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 26 26" fill="none" aria-hidden="true">
-      <circle cx="13" cy="13" r="11.5" stroke="#F7F7F4" strokeWidth="2" />
-      <path
-        d="M13 8.2l4 3-1.6 4.8h-4.8L9 11.2l4-3z"
-        fill="#AFFF00"
-        stroke="#AFFF00"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <Image
+      src="/assets/golo-head.png"
+      alt="Golo, the GOLAZO mascot"
+      width={size}
+      height={size}
+      priority
+      className="shrink-0"
+    />
   );
 }
