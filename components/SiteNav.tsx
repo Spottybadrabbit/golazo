@@ -16,6 +16,12 @@ export default function SiteNav() {
           <Link href="/play" className="transition-colors hover:text-chalk">
             Play
           </Link>
+          <Link href="/matches" className="transition-colors hover:text-chalk">
+            Matches
+          </Link>
+          <Link href="/cards" className="transition-colors hover:text-chalk">
+            Cards
+          </Link>
           <Link href="/squad" className="transition-colors hover:text-chalk">
             Squad
           </Link>
