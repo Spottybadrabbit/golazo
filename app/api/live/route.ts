@@ -16,6 +16,7 @@ export async function GET() {
   }
 
   const world = await feed.getWorld();
+  const matches = world.matches;
   return NextResponse.json(
     {
       mode: feed.mode,
