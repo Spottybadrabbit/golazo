@@ -19,6 +19,7 @@ import * as anchor from "@coral-xyz/anchor";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
+  createAssociatedTokenAccountIdempotentInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -122,6 +123,16 @@ async function main() {
   );
 
   console.log("Subscribing on-chain (devnet, free tier)…");
+  // The program expects the user's TxL token account to already exist. Create
+  // it idempotently in the same tx (empty ATA — the free tier costs 0 TxL).
+  const createAta = createAssociatedTokenAccountIdempotentInstruction(
+    keypair.publicKey,
+    userTokenAccount,
+    keypair.publicKey,
+    TXL_MINT,
+    TOKEN_2022_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+  );
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const txSig = await (program.methods as any)
     .subscribe(SERVICE_LEVEL_ID, DURATION_WEEKS)
@@ -136,6 +147,7 @@ async function main() {
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
     })
+    .preInstructions([createAta])
     .rpc();
   console.log("subscribe tx:", txSig);
 
