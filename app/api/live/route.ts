@@ -1,53 +1,44 @@
 import { NextResponse } from "next/server";
 import { currentRound, liveWorld } from "@/lib/engine";
-import { fetchLiveMarquee } from "@/lib/txline.server";
+import { fetchLiveFeed } from "@/lib/txline.server";
 
-// Server truth endpoint — LIVE ONLY. The simulator is no longer a fallback for
-// the featured match: the marquee comes from the real TxODDS TxLINE feed, and
-// if that feed is unavailable (no TXLINE_API_TOKEN / TXLINE_API_ORIGIN, or an
-// upstream outage) we return 503 rather than quietly serving simulated data.
-// Round timing and the surrounding slate still come from the deterministic
-// engine, which is the game clock — not a feed source.
+// Server truth endpoint. The featured match comes from the real TxODDS TxLINE
+// devnet feed; if that feed is unavailable (no token/origin, or upstream is
+// down) we report mode:"sim" and let the surrounding deterministic slate carry
+// the demo — the app never freezes. Round timing comes from the engine (it's
+// the game clock, not a feed source).
 export async function GET() {
   const world = liveWorld();
-  const live = await fetchLiveMarquee();
+  const feed = await fetchLiveFeed();
+  const live = feed?.featured ?? null;
 
   if (!live) {
     return NextResponse.json(
       {
-        mode: "live",
+        mode: "sim",
         ready: false,
         detail:
-          "TxLINE live feed unavailable. Set TXLINE_MODE=live, TXLINE_API_TOKEN and TXLINE_API_ORIGIN in the environment.",
+          "TxLINE live feed unavailable — running on the deterministic engine. Set TXLINE_MODE=live, TXLINE_API_TOKEN and TXLINE_API_ORIGIN to go live.",
+        now: world.now,
+        marquee: `${world.featured.home.code} v ${world.featured.away.code}`,
+        round: currentRound(world.now),
       },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      { headers: { "Cache-Control": "no-store" } },
     );
   }
 
-  const matches = [live, ...world.matches.slice(1)];
   return NextResponse.json(
     {
       mode: "live",
       ready: true,
-      source: "TxODDS TxLINE World Cup feed",
+      source: "TxODDS TxLINE World Cup feed (devnet)",
       now: world.now,
       nextTickAt: world.nextTickAt,
-      marquee: "ENG v FRA",
+      marquee: `${live.home.code} v ${live.away.code}`,
+      competition: live.competition,
       round: currentRound(world.now),
-      matches: matches.map((m) => ({
-        fixtureId: m.fixtureId,
-        home: m.home,
-        away: m.away,
-        minute: m.minute,
-        phase: m.phase,
-        score: m.score,
-        stats: m.stats,
-        probs: m.probs,
-        odds: m.odds,
-        pressure: m.pressure,
-        sequence: m.sequence,
-        events: m.events.slice(-6),
-      })),
+      featured: live,
+      matches: feed?.matches ?? [live],
     },
     { headers: { "Cache-Control": "no-store" } },
   );

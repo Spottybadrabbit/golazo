@@ -248,10 +248,28 @@ function DemoCard() {
       <div className="relative rounded-3xl border border-line bg-surface p-6 shadow-2xl">
         <div className="flex items-center justify-between font-mono text-xs text-muted">
           <span className="flex items-center gap-2">
-            <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
-            {m ? `LIVE ${m.minute}'` : "LIVE"}
+            <span
+              className={`live-dot inline-block h-2 w-2 rounded-full ${
+                m && (m.phase === "LIVE" || m.phase === "HT") ? "bg-volt" : "bg-muted"
+              }`}
+            />
+            {!m
+              ? "CONNECTING"
+              : m.phase === "LIVE"
+                ? `LIVE ${m.minute}'`
+                : m.phase === "HT"
+                  ? "HALF-TIME"
+                  : m.phase === "FT"
+                    ? "FULL-TIME"
+                    : "SCHEDULED"}
           </span>
-          <span>{m ? `fixture ${m.fixtureId}` : "connecting"}</span>
+          <span
+            className={
+              world?.source === "live" ? "font-semibold text-volt" : undefined
+            }
+          >
+            {world?.source === "live" ? "TxLINE LIVE" : m ? `fixture ${m.fixtureId}` : "connecting"}
+          </span>
         </div>
         <div className="mt-4 text-center">
           <div className="text-lg font-bold">

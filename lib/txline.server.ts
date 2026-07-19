@@ -1,20 +1,20 @@
 // TxLINE / TxODDS live adapter (server-only).
 //
 // The public game runs on the deterministic engine. The moment a TxLINE API
-// token is present, this adapter fetches the real World Cup feed instead,
-// mapping it to our MatchState shape. Getting the token is a one-time on-chain
-// step per the TxODDS docs: submit the Solana `subscribe` transaction, sign a
-// message, activate, then set these env vars:
+// token is present, this adapter fetches the real World Cup devnet feed and
+// maps it into the LiveFeed shape the whole UI already consumes. Getting the
+// token is a one-time on-chain step (see scripts/txline-activate.mts):
 //
 //   TXLINE_MODE=live
-//   TXLINE_API_TOKEN=<activated api token>       (X-Api-Token header)
-//   TXLINE_API_JWT=<guest jwt>                    (Authorization: Bearer)
-//   TXLINE_API_ORIGIN=https://txline.txodds.com   (or txline-dev for devnet)
+//   TXLINE_API_TOKEN=<activated api token>            (X-Api-Token header)
+//   TXLINE_API_ORIGIN=https://txline-dev.txodds.com   (devnet)
 //
-// Docs: https://txline.txodds.com/documentation/worldcup
+// Auth is a guest-JWT handshake: POST /auth/guest/start -> { token }, then send
+// that JWT as `Authorization: Bearer` alongside `X-Api-Token` on every call.
+// Docs: TxODDS "Fetching Snapshots" / "Streaming Data".
 
-import type { MatchState, SideStats, Team } from "@/lib/engine";
-import { team } from "@/lib/engine";
+import type { LiveFeed, LiveMatch, LiveTeam } from "@/lib/live-map";
+import { teamFromName } from "@/lib/teams-map";
 
 export function liveConfigured(): boolean {
   return (
@@ -24,116 +24,255 @@ export function liveConfigured(): boolean {
   );
 }
 
+// ---- Raw feed shapes (from the devnet payload probe) ---------------------
+
 interface TxFixture {
-  id: number;
-  home: { code: string; name: string };
-  away: { code: string; name: string };
-  minute: number;
-  status: string;
-  homeScore: number;
-  awayScore: number;
-  sequence: number;
+  Ts: number;
+  StartTime: number;
+  Competition: string;
+  CompetitionId: number;
+  Participant1: string;
+  Participant1Id: number;
+  Participant2: string;
+  Participant2Id: number;
+  FixtureId: number;
+  Participant1IsHome: boolean;
+  GameState?: number | string | null;
 }
 
-interface TxOdds {
-  home: number;
-  draw: number;
-  away: number;
+interface TxOddsRecord {
+  FixtureId: number;
+  Ts: number;
+  Bookmaker: string;
+  SuperOddsType: string;
+  InRunning: boolean;
+  PriceNames: string[];
+  Prices: number[];
+  Pct?: string[];
 }
 
-function headers(): HeadersInit {
-  const h: Record<string, string> = {
-    "X-Api-Token": process.env.TXLINE_API_TOKEN as string,
-    Accept: "application/json",
-  };
-  if (process.env.TXLINE_API_JWT) h.Authorization = `Bearer ${process.env.TXLINE_API_JWT}`;
-  return h;
+interface TxScoreRecord {
+  FixtureId: number;
+  GameState: string | null;
+  Action: string;
+  Ts: number;
+  Seq: number;
+  Data?: Record<string, unknown>;
+  Stats?: Record<string, unknown>;
 }
 
-// Bound every upstream call. A slow or hung TxODDS endpoint must not stall the
-// serverless function until its max duration — on timeout we throw and the
-// caller returns null, so /api/live responds 503 (live-only, no sim fallback).
-const TXLINE_TIMEOUT_MS = 2500;
+// ---- Auth: cached guest JWT ----------------------------------------------
 
-async function txGet<T>(path: string): Promise<T> {
-  const origin = process.env.TXLINE_API_ORIGIN as string;
-  const res = await fetch(`${origin}/api${path}`, {
-    headers: headers(),
+let jwtCache: { token: string; exp: number } | null = null;
+
+function decodeExp(jwt: string): number {
+  try {
+    const payload = JSON.parse(
+      Buffer.from(jwt.split(".")[1], "base64url").toString("utf8"),
+    ) as { exp?: number };
+    return payload.exp ? payload.exp * 1000 : Date.now() + 10 * 60_000;
+  } catch {
+    return Date.now() + 10 * 60_000;
+  }
+}
+
+const TXLINE_TIMEOUT_MS = 3000;
+
+async function guestJwt(origin: string, apiToken: string): Promise<string> {
+  const now = Date.now();
+  if (jwtCache && now < jwtCache.exp - 60_000) return jwtCache.token;
+  const res = await fetch(`${origin}/auth/guest/start`, {
+    method: "POST",
+    headers: { "X-Api-Token": apiToken, Accept: "application/json" },
     cache: "no-store",
     signal: AbortSignal.timeout(TXLINE_TIMEOUT_MS),
   });
-  if (!res.ok) throw new Error(`TxLINE ${path} -> ${res.status}`);
+  if (!res.ok) throw new Error(`guest/start -> ${res.status}`);
+  const body = (await res.json()) as { token: string };
+  jwtCache = { token: body.token, exp: decodeExp(body.token) };
+  return body.token;
+}
+
+async function txGet<T>(origin: string, jwt: string, apiToken: string, path: string): Promise<T> {
+  const res = await fetch(`${origin}${path}`, {
+    headers: {
+      Authorization: `Bearer ${jwt}`,
+      "X-Api-Token": apiToken,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(TXLINE_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`${path} -> ${res.status}`);
   return (await res.json()) as T;
 }
 
-function knownTeam(code: string, name: string): Team {
-  const t = team(code);
-  return t.code === code ? t : { code, name, flag: "🏳️", strength: 0.7 };
+// ---- Mapping --------------------------------------------------------------
+
+const PRICE_SCALE = 1000; // feed sends decimal odds × 1000 (2374 => 2.374)
+
+/** Pick the 1X2 market from an odds snapshot and orient it to home/away. */
+function map1x2(
+  records: TxOddsRecord[],
+  p1IsHome: boolean,
+): { odds: LiveMatch["odds"]; probs: LiveMatch["probs"] } {
+  const oneX2 = records
+    .filter((r) => r.SuperOddsType === "1X2_PARTICIPANT_RESULT" && r.Prices?.length === 3)
+    .sort((a, b) => b.Ts - a.Ts);
+  const rec = oneX2.find((r) => r.Bookmaker === "TXLineStablePriceDemargined") ?? oneX2[0];
+  if (!rec) return { odds: null, probs: null };
+
+  const [p1, draw, p2] = rec.Prices.map((p) => Math.round((p / PRICE_SCALE) * 100) / 100);
+  const pct = rec.Pct?.map((s) => Math.round(parseFloat(s) * 10) / 10);
+  const odds = p1IsHome
+    ? { home: p1, draw, away: p2 }
+    : { home: p2, draw, away: p1 };
+  const probs = pct
+    ? p1IsHome
+      ? { home: pct[0], draw: pct[1], away: pct[2] }
+      : { home: pct[2], draw: pct[1], away: pct[0] }
+    : null;
+  return { odds, probs };
 }
 
-function impliedProbs(o: TxOdds) {
-  const raw = { h: 1 / o.home, d: 1 / o.draw, a: 1 / o.away };
-  const sum = raw.h + raw.d + raw.a;
+/** Latest score record → goals / minute / phase. Tolerant of unknown fields. */
+function mapScore(records: TxScoreRecord[]): {
+  score: [number, number];
+  minute: number;
+  phase: string;
+  final: boolean;
+} {
+  const latest = records.slice().sort((a, b) => b.Seq - a.Seq || b.Ts - a.Ts)[0];
+  if (!latest) return { score: [0, 0], minute: 0, phase: "BREAK", final: false };
+  const d = (latest.Data ?? {}) as Record<string, unknown>;
+  const num = (...keys: string[]): number => {
+    for (const k of keys) {
+      const v = d[k];
+      if (typeof v === "number") return v;
+      if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) return Number(v);
+    }
+    return 0;
+  };
+  const home = num("Participant1Score", "HomeScore", "Score1", "score1", "part1");
+  const away = num("Participant2Score", "AwayScore", "Score2", "score2", "part2");
+  const minute = num("Minute", "minute", "GameMinute", "clock");
+  const gs = String(latest.GameState ?? "").toLowerCase();
+  const final = latest.Action === "game_finalised" || gs === "finished" || gs === "ft";
+  const phase = final
+    ? "FT"
+    : gs === "halftime" || gs === "ht"
+      ? "HT"
+      : gs === "inplay" || gs === "in_play" || gs === "live" || gs === "1sthalf" || gs === "2ndhalf"
+        ? "LIVE"
+        : "BREAK";
+  return { score: [home, away], minute, phase, final };
+}
+
+function toLiveTeam(name: string): LiveTeam {
+  const t = teamFromName(name);
+  return { code: t.code, name: t.name, flag: t.flag };
+}
+
+// ---- Warm-instance cache --------------------------------------------------
+
+const FEED_TTL_MS = 4000;
+let feedCache: { at: number; value: LiveFeed | null } | null = null;
+
+async function buildFeed(): Promise<LiveFeed | null> {
+  if (!liveConfigured()) return null;
+  const origin = process.env.TXLINE_API_ORIGIN as string;
+  const apiToken = process.env.TXLINE_API_TOKEN as string;
+
+  const jwt = await guestJwt(origin, apiToken);
+  const fixtures = await txGet<TxFixture[]>(origin, jwt, apiToken, "/api/fixtures/snapshot");
+  if (!Array.isArray(fixtures) || !fixtures.length) return null;
+
+  // Fetch odds + scores for each fixture (bounded, small N on the free tier).
+  const matches: LiveMatch[] = [];
+  let newestTs = 0;
+  for (const fx of fixtures) {
+    let odds: LiveMatch["odds"] = null;
+    let probs: LiveMatch["probs"] = null;
+    let score: [number, number] = [0, 0];
+    let minute = 0;
+    let phase = "BREAK";
+    try {
+      const oddsRecs = await txGet<TxOddsRecord[]>(
+        origin,
+        jwt,
+        apiToken,
+        `/api/odds/snapshot/${fx.FixtureId}`,
+      );
+      const mapped = map1x2(oddsRecs ?? [], fx.Participant1IsHome);
+      odds = mapped.odds;
+      probs = mapped.probs;
+    } catch {
+      /* no odds for this fixture */
+    }
+    try {
+      const scoreRecs = await txGet<TxScoreRecord[]>(
+        origin,
+        jwt,
+        apiToken,
+        `/api/scores/snapshot/${fx.FixtureId}`,
+      );
+      const s = mapScore(scoreRecs ?? []);
+      score = s.score;
+      minute = s.minute;
+      phase = s.phase;
+    } catch {
+      /* no scores for this fixture */
+    }
+
+    const home = fx.Participant1IsHome ? fx.Participant1 : fx.Participant2;
+    const away = fx.Participant1IsHome ? fx.Participant2 : fx.Participant1;
+    newestTs = Math.max(newestTs, fx.Ts || 0);
+    matches.push({
+      fixtureId: fx.FixtureId,
+      home: toLiveTeam(home),
+      away: toLiveTeam(away),
+      score,
+      minute,
+      phase,
+      competition: fx.Competition,
+      odds,
+      probs,
+      updatedAt: Date.now(),
+    });
+  }
+
+  // Featured = the most compelling REAL match: prefer an in-play World Cup game
+  // with odds, then any World Cup game with odds, then any match with odds,
+  // then the soonest kickoff. Never fabricate one.
+  const withOdds = matches.filter((m) => m.odds);
+  const isWC = (m: LiveMatch) => /world cup/i.test(m.competition);
+  const inPlay = (m: LiveMatch) => m.phase === "LIVE" || m.phase === "HT";
+  const featured =
+    withOdds.find((m) => isWC(m) && inPlay(m)) ??
+    withOdds.find((m) => isWC(m)) ??
+    withOdds.find((m) => inPlay(m)) ??
+    withOdds[0] ??
+    matches[0] ??
+    null;
+
   return {
-    home: Math.round((raw.h / sum) * 1000) / 10,
-    draw: Math.round((raw.d / sum) * 1000) / 10,
-    away: Math.round((raw.a / sum) * 1000) / 10,
+    mode: "live",
+    updatedAt: Date.now(),
+    featured,
+    matches,
   };
 }
 
-function emptyStats(): SideStats {
-  return { shots: 0, onTarget: 0, corners: 0, xg: 0, yellows: 0, reds: 0, possession: 50 };
-}
-
-/**
- * Fetch a single live fixture from TxLINE and map it to a MatchState. Returns
- * null on any failure so the caller can fall back to the simulator. Prefers the
- * England v France fixture when present.
- */
-// Warm-instance cache: the feed ticks ~every 12s, so serving a result up to a
-// few seconds old avoids two fresh upstream round-trips on every /api/live hit
-// (and a briefly-cached null keeps a down upstream from being hammered).
-const LIVE_TTL_MS = 5000;
-let liveCache: { at: number; value: MatchState | null } | null = null;
-
-export async function fetchLiveMarquee(): Promise<MatchState | null> {
-  const nowMs = Date.now();
-  if (liveCache && nowMs - liveCache.at < LIVE_TTL_MS) return liveCache.value;
+/** Real live feed for the whole UI. Returns null when unconfigured / upstream down. */
+export async function fetchLiveFeed(): Promise<LiveFeed | null> {
+  const now = Date.now();
+  if (feedCache && now - feedCache.at < FEED_TTL_MS) return feedCache.value;
   try {
-    const fixtures = await txGet<TxFixture[]>("/worldcup/fixtures?status=live");
-    if (!fixtures.length) {
-      liveCache = { at: nowMs, value: null };
-      return null;
-    }
-    const engFra = fixtures.find(
-      (f) =>
-        (f.home.code === "ENG" && f.away.code === "FRA") ||
-        (f.home.code === "FRA" && f.away.code === "ENG"),
-    );
-    const fx = engFra ?? fixtures[0];
-    const odds = await txGet<TxOdds>(`/worldcup/odds/${fx.id}`);
-    const probs = impliedProbs(odds);
-    const stats: [SideStats, SideStats] = [emptyStats(), emptyStats()];
-    const mapped: MatchState = {
-      fixtureId: fx.id,
-      cycle: 0,
-      slot: -1,
-      home: knownTeam(fx.home.code, fx.home.name),
-      away: knownTeam(fx.away.code, fx.away.name),
-      minute: fx.minute,
-      phase: fx.status === "HT" ? "HT" : fx.minute >= 90 ? "FT" : "LIVE",
-      score: [fx.homeScore, fx.awayScore],
-      stats,
-      probs,
-      odds,
-      pressure: 0,
-      events: [],
-      sequence: fx.sequence,
-    };
-    liveCache = { at: nowMs, value: mapped };
-    return mapped;
+    const value = await buildFeed();
+    feedCache = { at: now, value };
+    return value;
   } catch {
-    liveCache = { at: nowMs, value: null };
-    return null; // fall back to the simulator
+    feedCache = { at: now, value: null };
+    return null;
   }
 }

@@ -6,20 +6,32 @@ import { useLiveWorld } from "@/lib/useLiveWorld";
 export default function LiveTicker() {
   const world = useLiveWorld();
 
+  const live = world?.source === "live";
+  const phaseLabel = (p: string, minute: number) =>
+    p === "LIVE" ? `${minute}'` : p === "HT" ? "HT" : p === "FT" ? "FT" : "SCHEDULED";
+
   const items: string[] = [];
   if (world) {
     for (const m of world.matches) {
       items.push(
-        `${m.home.flag} ${m.home.code} ${m.score[0]}-${m.score[1]} ${m.away.code} ${m.away.flag} · ${
-          m.phase === "LIVE" ? `${m.minute}'` : m.phase
-        }`,
+        `${m.home.flag} ${m.home.code} ${m.score[0]}-${m.score[1]} ${m.away.code} ${m.away.flag} · ${phaseLabel(
+          m.phase,
+          m.minute,
+        )}`,
       );
-      items.push(
-        `1X2 ${m.odds.home.toFixed(2)} / ${m.odds.draw.toFixed(2)} / ${m.odds.away.toFixed(2)}`,
-      );
+      const hasOdds = m.odds.home > 0 || m.odds.draw > 0 || m.odds.away > 0;
+      if (hasOdds) {
+        items.push(
+          `1X2 ${m.odds.home.toFixed(2)} / ${m.odds.draw.toFixed(2)} / ${m.odds.away.toFixed(2)}`,
+        );
+      } else if (live) {
+        items.push("odds pending");
+      }
       const last = m.events[m.events.length - 1];
       if (last) items.push(`${last.minute}' ${last.detail}`);
-      items.push(`fixture ${m.fixtureId} · seq ${m.sequence} · verified on Solana`);
+      // Feed access is gated by a real on-chain subscription (devnet); per-stat
+      // Merkle proof validation is a separate step, so we don't claim it yet.
+      items.push(`fixture ${m.fixtureId} · ${live ? "TxODDS devnet" : `seq ${m.sequence}`}`);
     }
   } else {
     items.push("Connecting to the TxLINE feed");
