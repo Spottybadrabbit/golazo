@@ -28,20 +28,36 @@ export default function DocsPage() {
     );
     if (!els.length) return;
 
+    const compute = () => {
+      // Near the bottom, the last (short) section can never reach the observer
+      // band, so force it active — otherwise trailing sections never light up.
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      if (atBottom) {
+        setActive(SECTIONS[SECTIONS.length - 1].id);
+        return;
+      }
+      // The topmost currently-visible section wins.
+      const visible = SECTIONS.filter((s) => observed.current.has(s.id));
+      if (visible.length) setActive(visible[0].id);
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) observed.current.add(entry.target.id);
           else observed.current.delete(entry.target.id);
         }
-        // The topmost currently-visible section wins.
-        const visible = SECTIONS.filter((s) => observed.current.has(s.id));
-        if (visible.length) setActive(visible[0].id);
+        compute();
       },
       { rootMargin: "-96px 0px -70% 0px", threshold: 0 },
     );
     els.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
+    window.addEventListener("scroll", compute, { passive: true });
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", compute);
+    };
   }, []);
 
   return (
@@ -70,6 +86,7 @@ export default function DocsPage() {
             <a
               key={s.id}
               href={`#${s.id}`}
+              onClick={() => setActive(s.id)}
               className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
                 active === s.id ? "bg-volt/15 text-volt" : "text-muted hover:bg-surface hover:text-chalk"
               }`}
@@ -88,6 +105,7 @@ export default function DocsPage() {
                 <a
                   key={s.id}
                   href={`#${s.id}`}
+                  onClick={() => setActive(s.id)}
                   className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${
                     active === s.id
                       ? "bg-volt/15 text-volt"
