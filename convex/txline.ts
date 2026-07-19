@@ -248,22 +248,22 @@ export function mapScore(raw: any): TxScore {
   const stats = pick(rec, "Stats", "stats") ?? {};
   const goals = extractGoals(rec);
 
-  // Match minute comes from the feed's Clock: { Running, Seconds } where Seconds
-  // is elapsed match time — so minute = floor(Seconds/60). The Clock is the
-  // authoritative in-play signal: GameState can read "scheduled" even while the
-  // match clock is running.
-  const clock = pick(rec, "Clock", "clock") ?? {};
-  const clockSeconds =
-    typeof clock.Seconds === "number"
-      ? clock.Seconds
-      : typeof clock.seconds === "number"
-        ? clock.seconds
-        : undefined;
-  const running = Boolean(clock.Running ?? clock.running);
+  // Match minute comes from the feed's Clock: { Running, Seconds } (elapsed match
+  // time). Trailing heartbeat/coverage records can carry Seconds:0 with the
+  // highest Seq, so take the MAX Seconds across all records. GameState stays
+  // "scheduled" mid-match, so the Clock is the authoritative in-play signal.
+  let maxSeconds = 0;
+  let running = false;
+  for (const rr of records) {
+    const c = pick(rr, "Clock", "clock");
+    const secs = typeof c?.Seconds === "number" ? c.Seconds : typeof c?.seconds === "number" ? c.seconds : 0;
+    if (secs > maxSeconds) maxSeconds = secs;
+    if (c?.Running ?? c?.running) running = true;
+  }
   const minuteFromData = numFromData({ ...stats, ...data }, "Minute", "minute", "GameMinute");
   const minute =
-    clockSeconds !== undefined
-      ? Math.floor(clockSeconds / 60)
+    maxSeconds > 0
+      ? Math.floor(maxSeconds / 60)
       : minuteFromData === undefined
         ? null
         : minuteFromData;
