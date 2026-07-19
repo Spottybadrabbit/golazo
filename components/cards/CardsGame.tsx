@@ -8,20 +8,22 @@ import GlossyIcon, { GlossyShelf } from "@/components/icons/GlossyIcons";
 import {
   CARDS,
   collectionCount,
-  drawCard,
+  drawFromPool,
+  tomorrowPool,
+  tomorrowSlate,
+  TIER_ORDER,
   PACK_COST,
   PACK_SIZE,
   type CardDef,
-  type Rarity,
+  type Tier,
 } from "@/lib/cards";
 import { BADGES, loadPlayer, savePlayer, type PlayerState } from "@/lib/game";
+import type { Fixture } from "@/lib/engine";
 
-const RARITY_ORDER: Record<Rarity, number> = { common: 0, rare: 1, legend: 2 };
-
-function bestRarity(cards: CardDef[]): Rarity {
-  return cards.reduce<Rarity>(
-    (best, c) => (RARITY_ORDER[c.rarity] > RARITY_ORDER[best] ? c.rarity : best),
-    "common",
+function bestTier(cards: CardDef[]): Tier {
+  return cards.reduce<Tier>(
+    (best, c) => (TIER_ORDER[c.tier] > TIER_ORDER[best] ? c.tier : best),
+    "bronze",
   );
 }
 
@@ -46,9 +48,11 @@ export default function CardsGame() {
 
   const owned = collectionCount(player.cards ?? {});
   const canAfford = player.goalPoints >= PACK_COST;
+  const slate = tomorrowSlate();
 
   const handleOpen = () => {
-    const cards = Array.from({ length: PACK_SIZE }, () => drawCard());
+    const pool = tomorrowPool();
+    const cards = Array.from({ length: PACK_SIZE }, () => drawFromPool(pool));
     const nextCards = { ...(player.cards ?? {}) };
     for (const c of cards) nextCards[c.id] = (nextCards[c.id] ?? 0) + 1;
     const next: PlayerState = {
@@ -61,7 +65,7 @@ export default function CardsGame() {
     savePlayer(next);
     setPlayer(next);
     setPulled(cards);
-    if (bestRarity(cards) !== "common") setBurst(Date.now());
+    if (bestTier(cards) !== "bronze") setBurst(Date.now());
     setNote(newBadges.length ? `Badge unlocked: ${newBadges[0].name}` : null);
   };
 
@@ -72,7 +76,7 @@ export default function CardsGame() {
     setPackKey((k) => k + 1);
   };
 
-  const pulledBest = pulled ? bestRarity(pulled) : "common";
+  const pulledBest = pulled ? bestTier(pulled) : "bronze";
 
   return (
     <div className="relative">
@@ -81,13 +85,17 @@ export default function CardsGame() {
       {/* header — glossy reward shelf + title */}
       <header className="floodlight relative overflow-hidden rounded-3xl border border-line bg-surface px-5 pb-6 pt-7 text-center">
         <GlossyShelf className="mb-4" />
-        <h1 className="text-3xl font-extrabold uppercase tracking-tight sm:text-4xl">
-          Summer <span className="text-volt">packs</span>
+        <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-volt">
+          Matchday · tomorrow
+        </p>
+        <h1 className="mt-1 text-3xl font-extrabold uppercase tracking-tight sm:text-4xl">
+          Tomorrow&apos;s <span className="text-volt">pack</span>
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-          Bank Hi-Lo streaks into GOAL, rip foil packs, and chase the walkout. Two cards a pack —
-          odds on the tin: 52% common, 34% rare, 14% legend.
+          Only players from tomorrow&apos;s fixtures. Two cards a pack — pull odds by FIFA tier:
+          56% bronze, 32% silver, 12% gold.
         </p>
+        <FixtureStrip slate={slate} />
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
           <Stat icon="bolt" tint="volt" label="balance" value={`${player.goalPoints} GOAL`} />
           <Stat icon="shield" tint="cyan" label="collection" value={`${owned}/${CARDS.length}`} />
@@ -120,22 +128,22 @@ export default function CardsGame() {
         ) : (
           <div className="relative">
             {/* light beam behind a non-common walkout */}
-            {pulledBest !== "common" && (
+            {pulledBest !== "bronze" && (
               <span
                 className="burst-beam pointer-events-none absolute left-1/2 top-0 h-full w-40 -translate-x-1/2 blur-2xl"
                 style={{
                   background:
-                    pulledBest === "legend"
+                    pulledBest === "gold"
                       ? "linear-gradient(to bottom, rgba(175,255,0,0.6), transparent)"
-                      : "linear-gradient(to bottom, rgba(0,212,255,0.5), transparent)",
+                      : "linear-gradient(to bottom, rgba(215,230,238,0.5), transparent)",
                 }}
               />
             )}
             <p className="relative text-center font-mono text-[11px] uppercase tracking-widest text-volt">
-              {pulledBest === "legend"
-                ? "★ Legend walkout ★"
-                : pulledBest === "rare"
-                  ? "Rare pull"
+              {pulledBest === "gold"
+                ? "★ Gold walkout ★"
+                : pulledBest === "silver"
+                  ? "Silver pull"
                   : "Pack opened"}
             </p>
             <div className="relative mx-auto mt-4 grid max-w-lg grid-cols-2 gap-4 sm:gap-6">
@@ -200,6 +208,32 @@ export default function CardsGame() {
           mainnet they mint as compressed NFTs with TxLINE provenance.
         </p>
       </section>
+    </div>
+  );
+}
+
+function FixtureStrip({ slate }: { slate: Fixture[] }) {
+  if (!slate.length) return null;
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+      {slate.map((f) => (
+        <span
+          key={f.fixtureId}
+          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] ${
+            f.featured
+              ? "border-volt/60 bg-volt/10 text-chalk"
+              : "border-line bg-night/50 text-muted"
+          }`}
+          title={`${f.home.name} v ${f.away.name} · ${f.time}`}
+        >
+          <span aria-hidden>{f.home.flag}</span>
+          <span className="font-semibold text-chalk">{f.home.code}</span>
+          <span className="opacity-50">v</span>
+          <span className="font-semibold text-chalk">{f.away.code}</span>
+          <span aria-hidden>{f.away.flag}</span>
+          <span className="ml-0.5 opacity-60">{f.time}</span>
+        </span>
+      ))}
     </div>
   );
 }

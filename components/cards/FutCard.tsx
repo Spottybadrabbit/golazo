@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { RARITY_LABEL, statRows, type CardDef } from "@/lib/cards";
+import { TIER_LABEL, statRows, type CardDef } from "@/lib/cards";
 
 // A procedural FUT-style player card, rendered entirely from tokens — no photo
 // asset required, so it stays razor-sharp at any size. The FIFA Ultimate Team
@@ -22,7 +22,7 @@ interface RarityTheme {
 }
 
 const THEMES: Record<string, RarityTheme> = {
-  legend: {
+  gold: {
     hi: "#fff6c8",
     mid: "#e9c65a",
     lo: "#7a5a12",
@@ -33,25 +33,25 @@ const THEMES: Record<string, RarityTheme> = {
     holo: true,
     prism: true,
   },
-  rare: {
-    hi: "#e2f2f8",
-    mid: "#a2bcc8",
-    lo: "#3d545f",
-    glow: "rgba(0,212,255,0.32)",
-    ink: "#08161c",
-    sub: "#2a4650",
-    accent: "#00d4ff",
+  silver: {
+    hi: "#f3f7f9",
+    mid: "#b6c3cb",
+    lo: "#525e67",
+    glow: "rgba(200,222,232,0.30)",
+    ink: "#0e161b",
+    sub: "#3d4a53",
+    accent: "#d7e6ee",
     holo: true,
     prism: false,
   },
-  common: {
-    hi: "#4c4c47",
-    mid: "#2a2a26",
-    lo: "#131311",
-    glow: "rgba(247,247,244,0.10)",
-    ink: "#f7f7f4",
-    sub: "#9a9a92",
-    accent: "#9a9a92",
+  bronze: {
+    hi: "#f3cda2",
+    mid: "#bd7d46",
+    lo: "#5a3619",
+    glow: "rgba(199,133,74,0.30)",
+    ink: "#241305",
+    sub: "#6e4526",
+    accent: "#e9ab68",
     holo: false,
     prism: false,
   },
@@ -66,7 +66,7 @@ export interface FutCardProps {
 }
 
 export default function FutCard({ card, size = "lg", interactive = true, className }: FutCardProps) {
-  const t = THEMES[card.rarity];
+  const t = THEMES[card.tier];
   const ref = useRef<HTMLDivElement>(null);
   const rows = statRows(card.stats);
   const left = rows.slice(0, 3);
@@ -232,7 +232,7 @@ export default function FutCard({ card, size = "lg", interactive = true, classNa
             color: t.accent,
           }}
         >
-          {RARITY_LABEL[card.rarity]}
+          {TIER_LABEL[card.tier]}
         </span>
       </div>
     </div>

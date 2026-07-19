@@ -234,7 +234,7 @@ export default function HiLoGame() {
       {/* mascot commentary */}
       <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface p-3">
         <Image
-          src="/assets/mascot.jpg"
+          src="/assets/mascot-volt.jpg"
           alt="Golo, the GOLAZO pundit parrot"
           width={56}
           height={56}

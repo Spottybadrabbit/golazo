@@ -275,7 +275,7 @@ function makeFoilTexture(): THREE.CanvasTexture {
   ctx.fillText("GOLAZO", cx, H * 0.66);
   ctx.font = "bold 22px monospace";
   ctx.fillStyle = "#5a4408";
-  ctx.fillText("SUMMER PACK · 26", cx, H * 0.71);
+  ctx.fillText("MATCHDAY PACK · 26", cx, H * 0.71);
 
   // top gloss band
   const gloss = ctx.createLinearGradient(0, 0, W, H * 0.4);

@@ -50,7 +50,7 @@ export default function PunditFeed() {
       {/* bot header */}
       <div className="flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
         <Image
-          src="/assets/mascot.jpg"
+          src="/assets/mascot-volt.jpg"
           alt="Golo the pundit parrot"
           width={52}
           height={52}
@@ -89,7 +89,7 @@ export default function PunditFeed() {
           msgs.map((msg) => (
             <div key={msg.id} className="flex items-end gap-2.5">
               <Image
-                src="/assets/mascot.jpg"
+                src="/assets/mascot-volt.jpg"
                 alt=""
                 width={30}
                 height={30}
@@ -112,7 +112,7 @@ export default function PunditFeed() {
         )}
         {typing && (
           <div className="flex items-end gap-2.5">
-            <Image src="/assets/mascot.jpg" alt="" width={30} height={30} className="mb-1 rounded-lg" />
+            <Image src="/assets/mascot-volt.jpg" alt="" width={30} height={30} className="mb-1 rounded-lg" />
             <div className="flex gap-1 rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3.5">
               <span className="typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
               <span className="typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
