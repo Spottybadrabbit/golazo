@@ -449,6 +449,8 @@ export const agentTick = internalAction({
       eventWindowSec: st.eventWindowSec,
       minReprice: st.minReprice,
       volatilityThreshold: st.volatilityThreshold,
+      autoFreeze: st.autoFreeze,
+      autoHedge: st.autoHedge,
     };
 
     if (st.mode === "replay") {

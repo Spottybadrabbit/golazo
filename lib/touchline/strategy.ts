@@ -32,6 +32,7 @@ export function evaluateMarket(
   thresholds: AgentThresholds = DEFAULT_THRESHOLDS,
 ): AgentAction {
   if (
+    thresholds.autoFreeze !== false &&
     state.verifiedEventOccurred &&
     state.secondsSinceEvent <= thresholds.eventWindowSec &&
     Math.abs(state.probabilityMove) < thresholds.minReprice
@@ -40,6 +41,7 @@ export function evaluateMarket(
   }
 
   if (
+    thresholds.autoHedge !== false &&
     !state.verifiedEventOccurred &&
     Math.abs(state.unexplainedVolatility) > thresholds.volatilityThreshold
   ) {

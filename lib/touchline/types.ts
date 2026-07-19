@@ -57,12 +57,20 @@ export interface AgentThresholds {
   minReprice: number;
   /** Volatility above which an unexplained move is a price shock (prob units). */
   volatilityThreshold: number;
+  /** When false, the agent never emits FREEZE_MARKET (auto-freeze disabled).
+   *  Undefined is treated as enabled for backwards compatibility. */
+  autoFreeze?: boolean;
+  /** When false, the agent never emits PAPER_HEDGE (auto-hedge disabled).
+   *  Undefined is treated as enabled for backwards compatibility. */
+  autoHedge?: boolean;
 }
 
 export const DEFAULT_THRESHOLDS: AgentThresholds = {
   eventWindowSec: 10,
   minReprice: 0.05,
   volatilityThreshold: 0.08,
+  autoFreeze: true,
+  autoHedge: true,
 };
 
 /** A detected market signal — the auditable "why" behind an action. */
