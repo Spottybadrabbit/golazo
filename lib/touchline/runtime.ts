@@ -65,7 +65,8 @@ export function stepAgent(
   event: ScoreEvent | null,
   thresholds: AgentThresholds = DEFAULT_THRESHOLDS,
 ): StepResult {
-  let { status, prevProb, frozenAtProb, lastEventProb, lastEventTs, lastEventSeq } = rt;
+  const { prevProb } = rt;
+  let { status, frozenAtProb, lastEventProb, lastEventTs, lastEventSeq } = rt;
   const home = tick.probs.home;
 
   // A new verifiable event resets the divergence reference to the pre-event
