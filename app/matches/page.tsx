@@ -4,7 +4,7 @@ import MatchCentre from "@/components/matches/MatchCentre";
 
 export const metadata: Metadata = {
   title: "Match Centre. GOLAZO",
-  description: "Today's marquee England game live, and tomorrow's fixtures in 3D.",
+  description: "The live World Cup marquee match and upcoming fixtures on the TxLINE feed.",
 };
 
 export default function MatchesPage() {

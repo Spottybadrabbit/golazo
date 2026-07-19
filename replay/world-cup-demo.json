@@ -1,0 +1,22 @@
+{
+  "fixtureId": 18257739,
+  "home": "Spain",
+  "away": "Argentina",
+  "homeCode": "ESP",
+  "awayCode": "ARG",
+  "competition": "FIFA World Cup",
+  "startScore": [0, 1],
+  "startMinute": 71,
+  "note": "Deterministic demo timeline (TOUCHLINE_PRD §31). fixtureId 18257739 is a REAL TxLINE devnet fixture (Spain v Argentina) so lib/solana/verify.ts validates a genuinely anchored fixture root on-chain. Home odds barely move after the 72' equaliser (stale market -> FREEZE), then reprice (-> REOPEN), then a later unexplained shock (-> PAPER_HEDGE).",
+  "events": [
+    { "t": 0,     "type": "ODDS", "minute": 71, "odds": { "home": 3.20, "draw": 2.95, "away": 2.55 } },
+    { "t": 3000,  "type": "ODDS", "minute": 71, "odds": { "home": 3.18, "draw": 2.95, "away": 2.57 } },
+    { "t": 6000,  "type": "ODDS", "minute": 72, "odds": { "home": 3.22, "draw": 2.96, "away": 2.53 } },
+    { "t": 9000,  "type": "SCORE_EVENT", "minute": 72, "action": "GOAL", "side": "home", "sequence": 991, "homeScore": 1, "awayScore": 1 },
+    { "t": 11000, "type": "ODDS", "minute": 72, "odds": { "home": 3.14, "draw": 2.96, "away": 2.57 } },
+    { "t": 15000, "type": "ODDS", "minute": 73, "odds": { "home": 3.10, "draw": 2.97, "away": 2.58 } },
+    { "t": 25000, "type": "ODDS", "minute": 74, "odds": { "home": 2.55, "draw": 3.05, "away": 3.05 } },
+    { "t": 33000, "type": "ODDS", "minute": 75, "odds": { "home": 3.30, "draw": 3.00, "away": 2.30 } },
+    { "t": 40000, "type": "ODDS", "minute": 76, "odds": { "home": 2.90, "draw": 3.00, "away": 2.60 } }
+  ]
+}

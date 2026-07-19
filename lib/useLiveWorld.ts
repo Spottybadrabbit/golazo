@@ -122,7 +122,6 @@ export interface RoundClock {
  */
 export function useRoundClock(liveRound?: HiLoRound | null): RoundClock | null {
   const [clock, setClock] = useState<RoundClock | null>(null);
-  const roundRef = useRef<HiLoRound | null>(null);
 
   useEffect(() => {
     let raf = 0;

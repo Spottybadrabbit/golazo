@@ -4,6 +4,18 @@
 // Persisted in localStorage for the demo; swap for a real backend when
 // real money enters the picture.
 
+export type TxKind = "connect" | "disconnect" | "bank" | "pack" | "win" | "reset" | "bet";
+
+/** A single ledger entry — the history of money moving in and out. */
+export interface Tx {
+  id: string;
+  ts: number;
+  kind: TxKind;
+  label: string;
+  goal?: number; // signed change in GOAL points
+  sol?: number; // signed change in SOL
+}
+
 export interface PlayerState {
   handle: string | null;
   xp: number;
@@ -12,10 +24,14 @@ export interface PlayerState {
   picks: number;
   wins: number;
   goalPoints: number; // in-app currency earned by banking streaks
+  sol: number; // Solana balance in the connected wallet (simulated for the demo)
   badges: string[];
   wallet: string | null;
   lastRoundId: string | null;
   cards: Record<string, number>; // card id -> copies owned
+  ledger: Tx[]; // transaction history, newest first
+  sound: boolean; // settings: sound effects
+  reducedMotion: boolean; // settings: prefer reduced motion
 }
 
 const KEY = "golazo.player.v1";
@@ -28,10 +44,14 @@ export const FRESH: PlayerState = {
   picks: 0,
   wins: 0,
   goalPoints: 120,
+  sol: 0,
   badges: [],
   wallet: null,
   lastRoundId: null,
   cards: {},
+  ledger: [],
+  sound: true,
+  reducedMotion: false,
 };
 
 export function loadPlayer(): PlayerState {
@@ -45,9 +65,36 @@ export function loadPlayer(): PlayerState {
   }
 }
 
+// ---------- Convex write-through (registered by components/PlayerSync.tsx) ----------
+// game.ts stays framework-free — it never imports Convex/React. Instead,
+// PlayerSync registers these callbacks once the user is signed in (and clears
+// them again on sign-out), and savePlayer/pushTx fire them best-effort below.
+// localStorage remains the source of truth offline: a Convex hiccup here is
+// swallowed and never surfaces to the player.
+type PlayerSyncFn = (p: PlayerState) => void;
+type TxSyncFn = (p: PlayerState, tx: Tx) => void;
+
+let onPlayerSync: PlayerSyncFn | null = null;
+let onTxSync: TxSyncFn | null = null;
+
+/** Registered by PlayerSync once signed in; call with null to clear on sign-out. */
+export function registerPlayerSync(fn: PlayerSyncFn | null) {
+  onPlayerSync = fn;
+}
+
+/** Registered by PlayerSync once signed in; call with null to clear on sign-out. */
+export function registerTxSync(fn: TxSyncFn | null) {
+  onTxSync = fn;
+}
+
 export function savePlayer(p: PlayerState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(KEY, JSON.stringify(p));
+  try {
+    onPlayerSync?.(p);
+  } catch {
+    /* Convex mirror is best-effort — localStorage already has the write */
+  }
 }
 
 export function multiplier(streak: number): number {
@@ -125,7 +172,13 @@ export function bankStreak(p: PlayerState): { next: PlayerState; banked: number;
   const gross = p.streak * 25 * multiplier(p.streak);
   const fee = Math.ceil(gross * BANK_FEE);
   const banked = gross - fee;
-  return { next: { ...p, goalPoints: p.goalPoints + banked, streak: 0 }, banked, fee };
+  const settled: PlayerState = { ...p, goalPoints: p.goalPoints + banked, streak: 0 };
+  const next = pushTx(settled, {
+    kind: "bank",
+    label: `Banked a ${p.streak}-streak`,
+    goal: banked,
+  });
+  return { next, banked, fee };
 }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -138,4 +191,105 @@ export function mockWalletAddress(): string {
 
 export function shortAddress(a: string): string {
   return `${a.slice(0, 4)}..${a.slice(-4)}`;
+}
+
+// ---------- wallet + ledger ----------
+
+function txId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+/** Prepend a transaction to the ledger (capped so localStorage stays small). */
+export function pushTx(p: PlayerState, entry: Omit<Tx, "id" | "ts">): PlayerState {
+  const tx: Tx = { id: txId(), ts: Date.now(), ...entry };
+  const next = { ...p, ledger: [tx, ...(p.ledger ?? [])].slice(0, 60) };
+  try {
+    onTxSync?.(next, tx);
+  } catch {
+    /* Convex mirror is best-effort — the local ledger already has the entry */
+  }
+  return next;
+}
+
+/** Connect the (simulated) Solana wallet: mint an address + starter SOL float. */
+export function connectWallet(p: PlayerState): PlayerState {
+  const wallet = mockWalletAddress();
+  const sol = p.sol > 0 ? p.sol : Math.round((2 + Math.random() * 3) * 100) / 100;
+  return pushTx({ ...p, wallet, sol }, { kind: "connect", label: "Wallet connected", sol });
+}
+
+/** Disconnect the wallet but keep balances + history for when they return. */
+export function disconnectWallet(p: PlayerState): PlayerState {
+  return pushTx({ ...p, wallet: null }, { kind: "disconnect", label: "Wallet disconnected" });
+}
+
+/** Wipe demo progress back to a clean slate. */
+export function resetDemo(): PlayerState {
+  return { ...FRESH };
+}
+
+export function formatSol(n: number): string {
+  return `${n.toFixed(2)} SOL`;
+}
+
+/**
+ * Local (signed-out / Convex-unreachable) fallback for BetSlip: deducts the
+ * stake from the simulated SOL float and logs it. Play-money only — no real
+ * transfer, mirrors what `convex/wallet.ts`'s `placeBet` records server-side.
+ */
+export function placeBetLocal(
+  p: PlayerState,
+  opts: { pick: "home" | "draw" | "away"; stakeSol: number; odds: number },
+): { next: PlayerState; potentialPayout: number } {
+  const potentialPayout = Math.round(opts.stakeSol * opts.odds * 1e4) / 1e4;
+  const next = pushTx(
+    { ...p, sol: Math.round((p.sol - opts.stakeSol) * 1e4) / 1e4 },
+    {
+      kind: "bet",
+      label: `Bet ${opts.pick} @ ${opts.odds.toFixed(2)}x`,
+      sol: -opts.stakeSol,
+    },
+  );
+  return { next, potentialPayout };
+}
+
+/**
+ * Local (signed-out / Convex-unreachable) equivalent of Convex `placeFastBet`
+ * for the Fast Hi-Lo micro-prediction loop (components/play/FastHiLo.tsx):
+ * escrows the stake immediately by deducting it from the simulated SOL float.
+ * Play-money only, mirrors placeBetLocal's shape.
+ */
+export function placeFastBetLocal(
+  p: PlayerState,
+  opts: { market: "home" | "draw" | "away"; direction: "higher" | "lower"; stakeSol: number },
+): PlayerState {
+  return pushTx(
+    { ...p, sol: Math.round((p.sol - opts.stakeSol) * 1e4) / 1e4 },
+    {
+      kind: "bet",
+      label: `Fast Hi-Lo ${opts.direction} ${opts.market}`,
+      sol: -opts.stakeSol,
+    },
+  );
+}
+
+/**
+ * Local (signed-out / Convex-unreachable) equivalent of Convex `settleFastBet`:
+ * credits a win payout or a void refund back into the simulated SOL float. A
+ * loss needs no ledger entry — the stake was already forfeited at placement.
+ */
+export function settleFastBetLocal(
+  p: PlayerState,
+  opts: { stakeSol: number; payoutSol: number; result: "won" | "lost" | "void" },
+): PlayerState {
+  if (opts.result === "lost") return p;
+  const credit = opts.result === "void" ? opts.stakeSol : opts.payoutSol;
+  return pushTx(
+    { ...p, sol: Math.round((p.sol + credit) * 1e4) / 1e4 },
+    {
+      kind: "win",
+      label: opts.result === "void" ? "Fast Hi-Lo void — stake refunded" : "Fast Hi-Lo win",
+      sol: credit,
+    },
+  );
 }

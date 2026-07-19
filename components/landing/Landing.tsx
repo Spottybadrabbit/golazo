@@ -9,6 +9,7 @@ import Lenis from "lenis";
 import HeroMascot from "@/components/HeroMascot";
 import LiveTicker from "@/components/LiveTicker";
 import SiteNav from "@/components/SiteNav";
+import BottomTabs from "@/components/BottomTabs";
 import { CARDS } from "@/lib/cards";
 import { matchSlug } from "@/lib/match";
 import { useLiveWorld } from "@/lib/useLiveWorld";
@@ -111,7 +112,7 @@ export default function Landing() {
   }, []);
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="pb-16">
       <SiteNav />
       <Hero />
       <LiveTicker />
@@ -123,6 +124,7 @@ export default function Landing() {
       <PunditSection />
       <FairData />
       <Footer />
+      <BottomTabs />
     </div>
   );
 }
@@ -247,8 +249,27 @@ function DemoCard() {
       <div className="relative rounded-3xl border border-line bg-surface p-6 shadow-2xl">
         <div className="flex items-center justify-between font-mono text-xs text-muted">
           <span className="flex items-center gap-2">
-            <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
-            {m ? `LIVE ${m.minute}'` : "LIVE"}
+            <span
+              className={`live-dot inline-block h-2 w-2 rounded-full ${
+                m && (m.phase === "LIVE" || m.phase === "HT") ? "bg-volt" : "bg-muted"
+              }`}
+            />
+            {!m
+              ? "CONNECTING"
+              : m.phase === "LIVE"
+                ? `LIVE ${m.minute}'`
+                : m.phase === "HT"
+                  ? "HALF-TIME"
+                  : m.phase === "FT"
+                    ? "FULL-TIME"
+                    : "SCHEDULED"}
+          </span>
+          <span
+            className={
+              world?.source === "live" ? "font-semibold text-volt" : undefined
+            }
+          >
+            {world?.source === "live" ? "TxLINE LIVE" : m ? `fixture ${m.fixtureId}` : "connecting"}
           </span>
           {m ? (
             <Link
@@ -271,7 +292,7 @@ function DemoCard() {
             {m ? `${m.probs.home}%` : "50%"}
           </div>
           <div className="mt-1 font-mono text-[11px] uppercase tracking-widest text-muted">
-            {m ? `${m.home.code} win probability` : "win probability"}
+            {m ? `${m.home.name} win probability` : "win probability"}
           </div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-3">
@@ -358,7 +379,7 @@ function CardsSection() {
               }`}
               style={{ transformOrigin: "50% 90%" }}
             >
-              <Image src={c.art} alt={c.title} fill sizes="16rem" className="object-cover" />
+              <Image src={c.art ?? "/assets/pack.jpg"} alt={c.title} fill sizes="16rem" className="object-cover" />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night via-night/70 to-transparent p-3">
                 <div className="text-sm font-extrabold uppercase">{c.title}</div>
                 <div className="font-mono text-[11px] uppercase text-muted">
@@ -538,7 +559,7 @@ function PunditSection() {
         </div>
         <div data-rise className="relative">
           <Image
-            src="/assets/mascot.jpg"
+            src="/assets/mascot-volt.jpg"
             alt="Golo the pundit parrot, headset on, mid broadcast"
             width={520}
             height={520}
@@ -576,10 +597,11 @@ function FairData() {
           </p>
         </div>
         <div>
-          <h3 className="font-bold uppercase">Demo mode</h3>
+          <h3 className="font-bold uppercase">Real data, play money</h3>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            This build runs a simulated feed and play money. Flip TXLINE_MODE to live and the
-            same engine rides the real one.
+            GOLAZO runs on the live TxODDS TxLINE World Cup devnet feed — real
+            fixtures, odds, and scores. The markets are simulated and every
+            balance is play money. Real data, real adrenaline, zero risk.
           </p>
         </div>
       </div>

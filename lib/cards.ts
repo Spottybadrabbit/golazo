@@ -1,87 +1,191 @@
 "use client";
 
-// GOLAZO collectible cards: earn GOAL points from streaks, open packs,
-// complete the summer collection. Rarity odds are printed in the UI.
+// GOLAZO collectible player cards. Cards map to real World Cup nations; each
+// nation's signature player is minted at a metal tier — gold / silver / bronze
+// — set by that nation's global FIFA ranking and the player's rating, exactly
+// like FIFA Ultimate Team. The pack only contains players from nations with a
+// real fixture live on the TxLINE feed right now (see poolFromTeams below).
 
-export type Rarity = "common" | "rare" | "legend";
+export type Tier = "bronze" | "silver" | "gold";
+
+/** Football performance attributes shown on the card, in display order
+ * (GOALS ASSISTS TACKLES PASSES RUNS SHOTS). Collectible-card style values,
+ * not live match stats. */
+export interface CardStats {
+  goals: number;
+  assists: number;
+  tackles: number;
+  passes: number;
+  runs: number;
+  shots: number;
+}
 
 export interface CardDef {
   id: string;
   code: string;
   flag: string;
+  /** Card display title / nickname. */
   title: string;
-  rarity: Rarity;
-  art: string;
+  /** Short player-style surname shown on the card. */
+  name: string;
+  /** FUT position tag, e.g. RW / ST / CM. */
+  position: string;
+  /** Nation / squad line under the crest. */
+  squad: string;
+  /** Metal tier, from FIFA ranking + rating. */
+  tier: Tier;
+  /** Nation's global FIFA ranking (1 = best). */
+  fifaRank: number;
+  rating: number;
+  stats: CardStats;
+  /** Optional cover art (only the marquee three carry photography). */
+  art?: string;
 }
 
-export const CARDS: CardDef[] = [
-  {
-    id: "arg-ten",
-    code: "ARG",
-    flag: "🇦🇷",
-    title: "The Golden Ten",
-    rarity: "legend",
-    art: "/assets/card-arg.jpg",
-  },
-  {
-    id: "bra-nine",
-    code: "BRA",
-    flag: "🇧🇷",
-    title: "Samba Nine",
-    rarity: "rare",
-    art: "/assets/card-bra.jpg",
-  },
-  {
-    id: "fra-eight",
-    code: "FRA",
-    flag: "🇫🇷",
-    title: "Bleu Eight",
-    rarity: "rare",
-    art: "/assets/card-fra.jpg",
-  },
-  {
-    id: "eng-seven",
-    code: "ENG",
-    flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
-    title: "Lion Seven",
-    rarity: "common",
-    art: "/assets/card-eng.jpg",
-  },
-  {
-    id: "jpn-eleven",
-    code: "JPN",
-    flag: "🇯🇵",
-    title: "Samurai Eleven",
-    rarity: "common",
-    art: "/assets/card-jpn.jpg",
-  },
+export const TIER_LABEL: Record<Tier, string> = {
+  bronze: "Bronze",
+  silver: "Silver",
+  gold: "Gold",
+};
+
+export const TIER_ORDER: Record<Tier, number> = { bronze: 0, silver: 1, gold: 2 };
+
+type Arch = "fwd" | "wing" | "mid" | "def";
+
+const ARCH_FOR: Record<string, Arch> = {
+  ST: "fwd",
+  CF: "fwd",
+  RW: "wing",
+  LW: "wing",
+  CM: "mid",
+  CAM: "mid",
+  CB: "def",
+};
+
+const clamp = (n: number) => Math.max(32, Math.min(99, Math.round(n)));
+
+/** Deterministic, position-shaped stat line from a rating + position. */
+function mkStats(r: number, pos: string): CardStats {
+  const arch = ARCH_FOR[pos] ?? "mid";
+  const t: Record<Arch, CardStats> = {
+    fwd: { goals: r + 4, assists: r - 6, tackles: r - 40, passes: r - 8, runs: r + 2, shots: r + 5 },
+    wing: { goals: r - 2, assists: r + 3, tackles: r - 38, passes: r - 4, runs: r + 6, shots: r - 1 },
+    mid: { goals: r - 10, assists: r + 4, tackles: r - 6, passes: r + 5, runs: r + 1, shots: r - 8 },
+    def: { goals: r - 30, assists: r - 15, tackles: r + 5, passes: r - 6, runs: r - 8, shots: r - 34 },
+  };
+  const s = t[arch];
+  return {
+    goals: clamp(s.goals),
+    assists: clamp(s.assists),
+    tackles: clamp(s.tackles),
+    passes: clamp(s.passes),
+    runs: clamp(s.runs),
+    shots: clamp(s.shots),
+  };
+}
+
+/** Tier from FIFA ranking: top 5 gold, 6–10 silver, else bronze. */
+function tierForRank(rank: number): Tier {
+  if (rank <= 5) return "gold";
+  if (rank <= 10) return "silver";
+  return "bronze";
+}
+
+interface Seed {
+  code: string;
+  flag: string;
+  name: string;
+  title: string;
+  squad: string;
+  position: string;
+  fifaRank: number;
+  rating: number;
+  art?: string;
+}
+
+// One signature player per nation. fifaRank drives the metal tier; ratings and
+// names are original to GOLAZO (no real-player likeness). The marquee three
+// keep their existing cover art so the landing fan render is unchanged.
+const SEEDS: Seed[] = [
+  { code: "ARG", flag: "🇦🇷", name: "Rivera", title: "The Golden Ten", squad: "La Albiceleste", position: "RW", fifaRank: 1, rating: 96, art: "/assets/card-arg.jpg" },
+  { code: "BRA", flag: "🇧🇷", name: "do Santos", title: "Samba Nine", squad: "Seleção", position: "LW", fifaRank: 5, rating: 91, art: "/assets/card-bra.jpg" },
+  { code: "FRA", flag: "🇫🇷", name: "Lacroix", title: "Bleu Eight", squad: "Les Bleus", position: "ST", fifaRank: 2, rating: 93, art: "/assets/card-fra.jpg" },
+  { code: "ESP", flag: "🇪🇸", name: "Herrera", title: "La Roja Maestro", squad: "La Roja", position: "CM", fifaRank: 3, rating: 90 },
+  { code: "ENG", flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", name: "Ashworth", title: "Lion Seven", squad: "Three Lions", position: "LW", fifaRank: 4, rating: 89 },
+  { code: "POR", flag: "🇵🇹", name: "Mendes", title: "Selecção Spark", squad: "Seleção das Quinas", position: "RW", fifaRank: 6, rating: 87 },
+  { code: "NED", flag: "🇳🇱", name: "de Bruin", title: "Oranje Wall", squad: "Oranje", position: "CB", fifaRank: 8, rating: 85 },
+  { code: "CRO", flag: "🇭🇷", name: "Kovač", title: "Vatreni Metronome", squad: "Vatreni", position: "CM", fifaRank: 9, rating: 86 },
+  { code: "GER", flag: "🇩🇪", name: "Vogel", title: "Adler Engine", squad: "Die Mannschaft", position: "CM", fifaRank: 7, rating: 85 },
+  { code: "MAR", flag: "🇲🇦", name: "El Fassi", title: "Atlas Flyer", squad: "Atlas Lions", position: "RW", fifaRank: 10, rating: 84 },
+  { code: "URU", flag: "🇺🇾", name: "Cardozo", title: "Celeste Nine", squad: "La Celeste", position: "ST", fifaRank: 11, rating: 83 },
+  { code: "JPN", flag: "🇯🇵", name: "Takeda", title: "Samurai Eleven", squad: "Samurai Blue", position: "CAM", fifaRank: 13, rating: 82 },
+  { code: "SEN", flag: "🇸🇳", name: "Diallo", title: "Teranga Striker", squad: "Lions of Teranga", position: "ST", fifaRank: 14, rating: 81 },
+  { code: "COL", flag: "🇨🇴", name: "Restrepo", title: "Cafetero Ten", squad: "Los Cafeteros", position: "CAM", fifaRank: 12, rating: 81 },
+  { code: "USA", flag: "🇺🇸", name: "Brooks", title: "Stars & Stripes", squad: "USMNT", position: "RW", fifaRank: 15, rating: 80 },
+  { code: "MEX", flag: "🇲🇽", name: "Márquez", title: "El Tri Poacher", squad: "El Tri", position: "CF", fifaRank: 16, rating: 79 },
 ];
+
+export const CARDS: CardDef[] = SEEDS.map((s) => ({
+  id: `${s.code.toLowerCase()}-${s.name.toLowerCase().replace(/[^a-z]/g, "")}`,
+  code: s.code,
+  flag: s.flag,
+  title: s.title,
+  name: s.name,
+  position: s.position,
+  squad: s.squad,
+  tier: tierForRank(s.fifaRank),
+  fifaRank: s.fifaRank,
+  rating: s.rating,
+  stats: mkStats(s.rating, s.position),
+  art: s.art,
+}));
+
+const BY_CODE = new Map(CARDS.map((c) => [c.code, c]));
 
 export const PACK_COST = 100;
 export const PACK_SIZE = 2;
 
-const RARITY_WEIGHT: Record<Rarity, number> = { common: 0.52, rare: 0.34, legend: 0.14 };
+/** Pull odds by tier — bronze common, gold rare, like a real pack. */
+const TIER_WEIGHT: Record<Tier, number> = { bronze: 0.56, silver: 0.32, gold: 0.12 };
 
-export const RARITY_LABEL: Record<Rarity, string> = {
-  common: "Common",
-  rare: "Rare",
-  legend: "Legend",
-};
+/** Stat rows as [label, value] pairs in the card's two-column grid order. */
+export function statRows(s: CardStats): [string, number][] {
+  return [
+    ["GLS", s.goals],
+    ["AST", s.assists],
+    ["TCK", s.tackles],
+    ["PAS", s.passes],
+    ["RUN", s.runs],
+    ["SHT", s.shots],
+  ];
+}
 
-/** Draw one card by rarity weight, then uniformly within that rarity. */
-export function drawCard(rand: () => number = Math.random): CardDef {
+/**
+ * The player pool for today's pack: only nations with a real fixture live on
+ * the TxLINE feed right now. Teams without a preset card (not one of the 16
+ * seeded nations) simply don't contribute a card — no fabricated players are
+ * synthesized for them. An empty result means an honest "no pack yet" state.
+ */
+export function poolFromTeams(teams: { code: string }[]): CardDef[] {
+  const codes = new Set(teams.map((t) => t.code));
+  return CARDS.filter((c) => codes.has(c.code));
+}
+
+/** Draw one card from a pool, weighted by tier. */
+export function drawFromPool(pool: CardDef[], rand: () => number = Math.random): CardDef {
   const roll = rand();
   let acc = 0;
-  let rarity: Rarity = "common";
-  for (const r of ["common", "rare", "legend"] as Rarity[]) {
-    acc += RARITY_WEIGHT[r];
+  let tier: Tier = "bronze";
+  for (const t of ["bronze", "silver", "gold"] as Tier[]) {
+    acc += TIER_WEIGHT[t];
     if (roll <= acc) {
-      rarity = r;
+      tier = t;
       break;
     }
   }
-  const pool = CARDS.filter((c) => c.rarity === rarity);
-  return pool[Math.floor(rand() * pool.length)];
+  const tierPool = pool.filter((c) => c.tier === tier);
+  const pick = tierPool.length ? tierPool : pool;
+  return pick[Math.floor(rand() * pick.length)];
 }
 
 export function collectionCount(cards: Record<string, number>): number {
