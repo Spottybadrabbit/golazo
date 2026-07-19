@@ -5,11 +5,18 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLiveFeed } from "@/components/LiveDataProvider";
 import { useFavorites } from "@/lib/favorites";
+import { recommendHiLo, fmtMove } from "@/lib/hilo-edge";
 
-// Golo · PunditBot — LIVE ONLY. Golo now only talks about the matches you've
+// Golo · PunditBot — LIVE ONLY. Golo only talks about the matches you've
 // favorited (⭐ on Match Centre). Commentary is generated from each favorited
-// match's real feed data: kickoff, goals, phase changes, and win-probability
-// swings. No simulated feed.
+// match's REAL feed data — minute-by-minute status, goals, cards, phase
+// changes — plus value-aware Hi-Lo calls: HIGHER/LOWER is only shouted when a
+// market move carries genuine edge (magnitude × room to run), with a cooldown
+// so it never oscillates or repeats. No simulated feed.
+
+// Same-direction Hi-Lo calls are held back for this long so the feed doesn't
+// spam; a genuine reversal (flip) bypasses it.
+const REC_COOLDOWN_MS = 40_000;
 
 interface Msg {
   id: string;
@@ -22,7 +29,10 @@ interface TrackedState {
   seenIntro: boolean;
   score?: string;
   phase?: string;
-  pHome?: number;
+  pHome?: number; // baseline home win prob the next Hi-Lo edge is measured from
+  minute?: number;
+  lastCall?: "HIGHER" | "LOWER" | null;
+  lastRecAt?: number;
 }
 
 function timeLabel(at: number): string {
@@ -77,6 +87,9 @@ export default function PunditFeed() {
           score: `${m.score[0]}-${m.score[1]}`,
           phase: m.phase,
           pHome: m.probs?.home,
+          minute: m.minute,
+          lastCall: null,
+          lastRecAt: 0,
         };
         continue;
       }
@@ -85,7 +98,7 @@ export default function PunditFeed() {
       const score = `${m.score[0]}-${m.score[1]}`;
       if (L.score !== undefined && L.score !== score) {
         push(
-          `GOOOAL! ${m.home.code} ${m.score[0]}-${m.score[1]} ${m.away.code}. Market's about to move.`,
+          `GOOOAL! ${m.home.code} ${m.score[0]}-${m.score[1]} ${m.away.code}. Market's about to move — watch the Hi-Lo.`,
           "event",
         );
       }
@@ -105,19 +118,52 @@ export default function PunditFeed() {
       }
       L.phase = m.phase;
 
-      // Win-probability swing.
+      // Minute-by-minute status line while live: clock, score, live win-prob,
+      // and 1X2 odds — the real TxLINE data as it ticks. (The devnet feed
+      // doesn't expose possession/xG/cards, so we never fabricate them.)
+      if (m.phase === "LIVE" && L.minute !== undefined && m.minute > L.minute) {
+        const oddsPart = m.odds
+          ? ` · odds ${m.odds.home.toFixed(2)}/${m.odds.draw.toFixed(2)}/${m.odds.away.toFixed(2)}`
+          : "";
+        const probPart = m.probs
+          ? ` · ${m.probs.home >= m.probs.away ? m.home.code : m.away.code} favoured (${Math.max(m.probs.home, m.probs.away)}%)`
+          : "";
+        push(
+          `${m.minute}' — ${m.home.code} ${m.score[0]}-${m.score[1]} ${m.away.code}${probPart}${oddsPart}.`,
+          "note",
+        );
+        L.minute = m.minute;
+      } else if (L.minute === undefined) {
+        L.minute = m.minute;
+      }
+
+      // Hi-Lo call — only when the market move carries real edge, and de-spammed
+      // (same-direction calls wait out a cooldown; a reversal fires immediately).
       if (m.probs) {
         const p = m.probs.home;
-        if (L.pHome === undefined) {
-          L.pHome = p;
-        } else if (Math.abs(p - L.pHome) >= 1.5) {
-          const up = p > L.pHome;
-          push(
-            `${m.home.code} v ${m.away.code}: ${m.home.code} ${up ? "climbing" : "drifting"} — win prob now ${p}%. ${
-              up ? "HIGHER's looking tasty." : "LOWER callers, this is your window."
-            }`,
-            "note",
-          );
+        const base = L.pHome ?? p;
+        const rec = recommendHiLo({ prevProb: base, currProb: p });
+        if (rec) {
+          const now = Date.now();
+          const flipped = L.lastCall != null && L.lastCall !== rec.call;
+          const cooled = !L.lastRecAt || now - L.lastRecAt > REC_COOLDOWN_MS;
+          if (flipped || cooled || L.lastCall == null) {
+            const verb = rec.call === "HIGHER" ? "climbing" : "drifting";
+            const tail =
+              rec.confidence === "strong"
+                ? `${rec.call}'s the value call`
+                : rec.confidence === "lean"
+                  ? `lean ${rec.call}`
+                  : `slight ${rec.call} edge`;
+            push(
+              `${m.home.code} ${verb} ${fmtMove(rec.move)} → ${p}% · ${tail} (edge ${rec.edge}/100, room ${rec.room}pp).`,
+              "note",
+            );
+            L.lastCall = rec.call;
+            L.lastRecAt = now;
+            L.pHome = p; // reset baseline so the next call needs a fresh move
+          }
+        } else if (L.pHome === undefined) {
           L.pHome = p;
         }
       }
