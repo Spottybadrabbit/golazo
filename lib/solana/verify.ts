@@ -54,15 +54,6 @@ export interface VerifyResult {
   rootPda?: string;
 }
 
-const FIXTURE_ROOT_PREFIXES = [
-  "ten_daily_fixtures_roots",
-  "daily_fixtures_roots",
-  "fixtures_root",
-  "fixtures_roots",
-  "daily_fixtures",
-  "ten_daily_fixtures",
-];
-
 const CUSTOM_ERR: Record<number, string> = {
   6003: "InvalidSubTreeProof",
   6004: "InvalidMainTreeProof",
@@ -198,19 +189,33 @@ export async function verifyFixtureOnChain(fixtureId: number): Promise<VerifyRes
 
   // simulate() needs a fee payer that EXISTS on-chain (a random key → the RPC
   // returns AccountNotFound before the program even runs). Its signature is
-  // never checked (sigVerify:false) and it is never charged. Any funded,
-  // system-owned account works, so we borrow one from a recent program tx.
-  const payer = await discoverFeePayer(connection, c.programId);
-  if (!payer) return { ...base, detail: "Could not establish a read-only simulate fee payer (devnet RPC unavailable)." };
+  // never checked (sigVerify:false) and it is never charged. We use the
+  // project's own funded devnet wallet (overridable via SOLANA_FEE_PAYER)
+  // rather than an extra RPC round-trip to discover one — the public devnet RPC
+  // rate-limits hard.
+  const FEE_PAYER = new PublicKey(
+    process.env.SOLANA_FEE_PAYER || "DLsqam2AurDnYDhEGHcACvg3nyMcMzTEetTjiDuArmU3",
+  );
 
+  // Simulate with light backoff so a transient devnet 429 doesn't fail the
+  // whole verification.
   const simulate = async (ix: any) => {
-    const { blockhash } = await connection.getLatestBlockhash();
-    const msg = new TransactionMessage({
-      payerKey: payer,
-      recentBlockhash: blockhash,
-      instructions: [ix],
-    }).compileToV0Message();
-    return (await connection.simulateTransaction(new VersionedTransaction(msg), { sigVerify: false, replaceRecentBlockhash: true })).value;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const { blockhash } = await connection.getLatestBlockhash();
+        const msg = new TransactionMessage({
+          payerKey: FEE_PAYER,
+          recentBlockhash: blockhash,
+          instructions: [ix],
+        }).compileToV0Message();
+        return (await connection.simulateTransaction(new VersionedTransaction(msg), { sigVerify: false, replaceRecentBlockhash: true })).value;
+      } catch (e) {
+        lastErr = e;
+        await sleep(400 * (attempt + 1));
+      }
+    }
+    throw lastErr;
   };
 
   const customErr = (err: any): { code: number; name: string } | null => {
@@ -220,82 +225,36 @@ export async function verifyFixtureOnChain(fixtureId: number): Promise<VerifyRes
     return { code: -1, name: JSON.stringify(err) };
   };
 
-  // 4. Locate the fixtures-root PDA (seeds absent from IDL): scan program-owned
-  //    (prefix, epoch-day) candidates.
-  const today = Math.floor(Date.now() / 86400000);
-  const snapDay = Math.floor(ixArgs.ts / 86400000);
-  const days = [today, today - 1, snapDay, snapDay - 1, snapDay + 1];
-  let rootPda: PublicKey | null = null;
-  for (const prefix of FIXTURE_ROOT_PREFIXES) {
-    for (const ed of days) {
-      const e2 = Buffer.alloc(2); e2.writeUInt16LE(ed & 0xffff);
-      for (const seeds of [[e2], [] as Buffer[]]) {
-        let pda: PublicKey;
-        try {
-          [pda] = PublicKey.findProgramAddressSync([Buffer.from(prefix), ...seeds], c.programId);
-        } catch {
-          continue;
-        }
-        let info = null;
-        try {
-          info = await connection.getAccountInfo(pda);
-        } catch {
-          /* rate limit — keep scanning */
-        }
-        await sleep(120);
-        if (info && info.owner.equals(c.programId)) {
-          rootPda = pda;
-          break;
-        }
-      }
-      if (rootPda) break;
-    }
-    if (rootPda) break;
-  }
-
-  // 5. Simulate; if the root PDA is wrong, the program leaks the expected one
-  //    in a ConstraintSeeds error ("Right: <pubkey>") — use it and retry once.
+  // The root PDA's seeds aren't in the IDL, and scanning dozens of candidates
+  // is rate-limit death on public devnet. Instead we let the program tell us:
+  // simulate against a known program-owned account (pricing_matrix); the
+  // handler runs and rejects with a ConstraintSeeds error that leaks the
+  // EXPECTED ten_daily_fixtures_roots PDA ("Right: <pubkey>"), then verify
+  // against that. ~2 simulates + 1 getAccountInfo total.
   try {
-    if (!rootPda) {
-      const [pricingMatrix] = PublicKey.findProgramAddressSync([Buffer.from("pricing_matrix")], c.programId);
-      rootPda = pricingMatrix; // forces the handler to run and leak the expected root
-    }
-    let sim = await simulate(await buildIx(rootPda));
+    const [pricingMatrix] = PublicKey.findProgramAddressSync([Buffer.from("pricing_matrix")], c.programId);
+    let sim = await simulate(await buildIx(pricingMatrix));
     let ce = customErr(sim.err);
-    if (!ce) return { ...base, verified: true, detail: "Fixture data root verified on Solana devnet (read-only validate_fixture).", rootPda: rootPda.toBase58() };
+    if (!ce) {
+      return { ...base, verified: true, detail: "Fixture data root verified on Solana devnet (read-only validate_fixture).", rootPda: pricingMatrix.toBase58() };
+    }
 
     const expected = leakExpectedPda(sim.logs ?? []);
-    if (expected) {
-      const info = await connection.getAccountInfo(expected).catch(() => null);
-      if (!info) {
-        return { ...base, detail: `Fixture ${fixtureId} verification unavailable: its on-chain root has aged out of the anchoring window.`, rootPda: expected.toBase58() };
-      }
-      sim = await simulate(await buildIx(expected));
-      ce = customErr(sim.err);
-      rootPda = expected;
-      if (!ce) return { ...base, verified: true, detail: "Fixture data root verified on Solana devnet (read-only validate_fixture).", rootPda: expected.toBase58() };
+    if (!expected) {
+      return { ...base, detail: `On-chain check inconclusive for fixture ${fixtureId} (${ce.name}); expected root not resolvable.` };
     }
-    return { ...base, detail: `On-chain check did not pass for fixture ${fixtureId}: ${ce?.name ?? "unknown"}.`, rootPda: rootPda.toBase58() };
+    const info = await connection.getAccountInfo(expected).catch(() => null);
+    if (!info) {
+      return { ...base, detail: `Fixture ${fixtureId} verification unavailable: its on-chain root has aged out of the anchoring window.`, rootPda: expected.toBase58() };
+    }
+    sim = await simulate(await buildIx(expected));
+    ce = customErr(sim.err);
+    if (!ce) {
+      return { ...base, verified: true, detail: "Fixture data root verified on Solana devnet (read-only validate_fixture).", rootPda: expected.toBase58() };
+    }
+    return { ...base, detail: `On-chain check did not pass for fixture ${fixtureId}: ${ce.name}.`, rootPda: expected.toBase58() };
   } catch (e: any) {
     return { ...base, detail: `Verification error: ${e?.message ?? e}` };
-  }
-}
-
-// A funded, system-owned account to use as the (never-charged) simulate fee
-// payer. Borrowed from the fee payer of a recent program transaction and cached
-// for the process. Read-only.
-let CACHED_FEE_PAYER: PublicKey | null = null;
-async function discoverFeePayer(connection: Connection, programId: PublicKey): Promise<PublicKey | null> {
-  if (CACHED_FEE_PAYER) return CACHED_FEE_PAYER;
-  try {
-    const sigs = await connection.getSignaturesForAddress(programId, { limit: 1 });
-    if (!sigs.length) return null;
-    const tx = await connection.getTransaction(sigs[0].signature, { maxSupportedTransactionVersion: 0 });
-    const key = tx?.transaction.message.getAccountKeys().get(0) ?? null;
-    if (key) CACHED_FEE_PAYER = key;
-    return CACHED_FEE_PAYER;
-  } catch {
-    return null;
   }
 }
 
