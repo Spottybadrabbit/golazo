@@ -14,6 +14,7 @@ import type * as game from "../game.js";
 import type * as poller from "../poller.js";
 import type * as teams from "../teams.js";
 import type * as txline from "../txline.js";
+import type * as wallet from "../wallet.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   poller: typeof poller;
   teams: typeof teams;
   txline: typeof txline;
+  wallet: typeof wallet;
 }>;
 
 /**

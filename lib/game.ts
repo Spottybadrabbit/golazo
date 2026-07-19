@@ -4,7 +4,7 @@
 // Persisted in localStorage for the demo; swap for a real backend when
 // real money enters the picture.
 
-export type TxKind = "connect" | "disconnect" | "bank" | "pack" | "win" | "reset";
+export type TxKind = "connect" | "disconnect" | "bank" | "pack" | "win" | "reset" | "bet";
 
 /** A single ledger entry — the history of money moving in and out. */
 export interface Tx {
@@ -197,4 +197,25 @@ export function resetDemo(): PlayerState {
 
 export function formatSol(n: number): string {
   return `${n.toFixed(2)} SOL`;
+}
+
+/**
+ * Local (signed-out / Convex-unreachable) fallback for BetSlip: deducts the
+ * stake from the simulated SOL float and logs it. Play-money only — no real
+ * transfer, mirrors what `convex/wallet.ts`'s `placeBet` records server-side.
+ */
+export function placeBetLocal(
+  p: PlayerState,
+  opts: { pick: "home" | "draw" | "away"; stakeSol: number; odds: number },
+): { next: PlayerState; potentialPayout: number } {
+  const potentialPayout = Math.round(opts.stakeSol * opts.odds * 1e4) / 1e4;
+  const next = pushTx(
+    { ...p, sol: Math.round((p.sol - opts.stakeSol) * 1e4) / 1e4 },
+    {
+      kind: "bet",
+      label: `Bet ${opts.pick} @ ${opts.odds.toFixed(2)}x`,
+      sol: -opts.stakeSol,
+    },
+  );
+  return { next, potentialPayout };
 }

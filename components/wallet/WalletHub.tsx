@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SignInButton, useClerk, useUser } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 import GlossyIcon from "@/components/icons/GlossyIcons";
 import {
   connectWallet,
@@ -17,6 +20,8 @@ import {
 } from "@/lib/game";
 
 const clerkOn = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+const convexOn = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
+const FAUCET_URL = "https://faucet.solana.com";
 
 type Tab = "overview" | "history" | "settings";
 
@@ -73,7 +78,7 @@ export default function WalletHub() {
 
       <div className="mt-5">
         {tab === "overview" && <Overview player={player} />}
-        {tab === "history" && <History player={player} />}
+        {tab === "history" && <TransactionHistory player={player} />}
         {tab === "settings" && <Settings player={player} update={update} realWallet={clerkOn} />}
       </div>
     </div>
@@ -135,6 +140,29 @@ function BalanceGrid({
           Log out
         </button>
       </div>
+      <TopUpLink className="sm:col-span-2" />
+    </div>
+  );
+}
+
+/** Devnet faucet link — the user opens it themselves; this app never signs or
+ * sends anything. Free test SOL only, no real value. */
+function TopUpLink({ className }: { className?: string }) {
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-dashed border-line bg-night/30 px-4 py-3 ${className ?? ""}`}
+    >
+      <p className="font-mono text-[11px] leading-relaxed text-muted">
+        Need devnet SOL? It&apos;s free test currency — not real money.
+      </p>
+      <a
+        href={FAUCET_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 rounded-full bg-volt px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-night transition-transform hover:scale-[1.03] active:translate-y-px"
+      >
+        Top up ↗
+      </a>
     </div>
   );
 }
@@ -170,7 +198,7 @@ function RealPanel({ player, update }: { player: PlayerState; update: (p: Player
     if (base.wallet !== address) {
       update(pushTx({ ...base, wallet: address }, { kind: "connect", label: "Wallet connected" }));
     }
-    fetch(`/api/wallet/balance?address=${encodeURIComponent(address)}`)
+    fetch(`/api/balance?address=${encodeURIComponent(address)}&network=devnet`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("balance"))))
       .then((d: { sol?: number }) => {
         if (!alive) return;
@@ -267,7 +295,7 @@ function DemoPanel({ player, update }: { player: PlayerState; update: (p: Player
   );
 }
 
-function BalanceCard({
+export function BalanceCard({
   label,
   value,
   tint,
@@ -319,6 +347,87 @@ function Overview({ player }: { player: PlayerState }) {
   );
 }
 
+/** History tab: Convex `myLedger` (durable, cross-device) for signed-in
+ * players when Convex is configured; the local demo ledger otherwise. Gates
+ * on the *runtime* sign-in state (not just whether Clerk is configured) so a
+ * signed-out visitor still sees their local ledger instead of an always-empty
+ * Convex query. */
+export function TransactionHistory({ player }: { player: PlayerState }) {
+  if (!convexOn) return <History player={player} />;
+  return clerkOn ? (
+    <TransactionHistoryAuthGate player={player} />
+  ) : (
+    <History player={player} />
+  );
+}
+
+function TransactionHistoryAuthGate({ player }: { player: PlayerState }) {
+  const { isLoaded, isSignedIn } = useUser();
+  if (!isLoaded) return <History player={player} />;
+  return isSignedIn ? <ConvexHistory /> : <History player={player} />;
+}
+
+const LEDGER_KIND_ICON: Record<
+  "earn" | "spend" | "reward" | "promo" | "bonus" | "refund",
+  "bolt" | "trophy" | "star" | "flame" | "crown" | "ball"
+> = {
+  earn: "bolt",
+  spend: "ball",
+  reward: "trophy",
+  promo: "crown",
+  bonus: "star",
+  refund: "flame",
+};
+
+function ConvexHistory() {
+  const rows = useQuery(api.wallet.myLedger, {});
+
+  if (rows === undefined) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <div className="animate-pulse font-mono text-sm text-muted">Loading history…</div>
+      </div>
+    );
+  }
+
+  if (!rows.length) {
+    return (
+      <div className="rounded-2xl border border-dashed border-line bg-surface p-10 text-center">
+        <GlossyIcon name="trophy" tint="gold" size={44} className="mx-auto opacity-60" />
+        <p className="mt-3 text-sm text-muted">
+          No transactions yet. Place a play-money bet and it shows up here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+      {rows.map((r) => (
+        <li key={r._id} className="flex items-center gap-3 px-4 py-3">
+          <GlossyIcon
+            name={LEDGER_KIND_ICON[r.kind]}
+            tint={r.amount >= 0 ? "volt" : "ember"}
+            size={28}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-chalk">{r.reason}</div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-muted">
+              {relTime(r.createdAt)}
+            </div>
+          </div>
+          <div
+            className={`font-mono text-sm font-bold ${r.amount >= 0 ? "text-up" : "text-down"}`}
+          >
+            {r.amount > 0 ? "+" : ""}
+            {r.amount} {r.currency}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function History({ player }: { player: PlayerState }) {
   const ledger = player.ledger ?? [];
   const made = ledger.filter((t) => (t.goal ?? 0) > 0).reduce((a, t) => a + (t.goal ?? 0), 0);
@@ -363,6 +472,7 @@ const KIND_ICON: Record<Tx["kind"], "bolt" | "trophy" | "star" | "flame" | "crow
   pack: "trophy",
   win: "ball",
   reset: "flame",
+  bet: "ball",
 };
 
 function LedgerRow({ tx }: { tx: Tx }) {
@@ -439,8 +549,14 @@ function Settings({
         <h3 className="font-mono text-[11px] uppercase tracking-widest text-muted">Wallet</h3>
         <p className="mt-2 text-sm text-muted">
           {player.wallet ? shortAddress(player.wallet) : "No wallet connected."}
-          {realWallet && player.wallet ? " · live Solana balance" : ""}
+          {realWallet && player.wallet ? " · live devnet balance" : ""}
         </p>
+        <Link
+          href="/settings"
+          className="mt-3 inline-block text-sm font-semibold text-volt hover:underline"
+        >
+          Open full settings →
+        </Link>
       </section>
 
       <section className="rounded-2xl border border-down/30 bg-down/5 p-5">
@@ -461,7 +577,7 @@ function Settings({
   );
 }
 
-function Toggle({
+export function Toggle({
   label,
   on,
   onChange,

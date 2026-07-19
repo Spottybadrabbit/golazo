@@ -44,7 +44,7 @@ export default function WalletChip() {
         <span className="text-muted">GOAL</span>
       </span>
       {connected && (
-        <span className="hidden border-l border-line pl-2 font-mono text-xs text-chalk sm:inline">
+        <span className="border-l border-line pl-2 font-mono text-xs text-chalk">
           {formatSol(p.sol)}
         </span>
       )}

@@ -128,6 +128,11 @@ export default defineSchema({
     streakAfter: v.optional(v.number()),
     sequence: v.optional(v.number()),
     solanaTx: v.optional(v.string()),
+    // Play-money SOL wager fields (game:"pool") — set by convex/wallet.ts's
+    // placeBet; optional so existing Hi-Lo/pack rows are unaffected.
+    stakeSol: v.optional(v.number()),
+    oddsAtPick: v.optional(v.number()),
+    potentialPayout: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_clerk", ["clerkId"])
