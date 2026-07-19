@@ -42,6 +42,32 @@ const PUSH_LINES = ["Dead level. Nobody wins, nobody cries. Again!"];
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+type Market = "home" | "draw" | "away";
+
+const MARKET_LABELS: Record<Market, string> = { home: "HOME", draw: "DRAW", away: "AWAY" };
+
+/** Value stored + timestamped every time the selected market's live value
+ * changes — the small history a Hi-Lo round needs to show the "edge": how
+ * the stat has moved over roughly the last round. */
+interface HistPoint {
+  value: number;
+  at: number;
+}
+
+/** The history entry closest to (but not after) `now - windowMs`, or null if
+ * the history doesn't yet stretch back that far (still warming up). */
+function edgeReference(history: HistPoint[], now: number, windowMs: number): number | null {
+  if (history.length === 0) return null;
+  const target = now - windowMs;
+  if (history[0].at > target) return null; // not enough history yet
+  let ref = history[0];
+  for (const h of history) {
+    if (h.at <= target) ref = h;
+    else break;
+  }
+  return ref.value;
+}
+
 function callTitle(streak: number): string {
   if (streak >= 8) return "GOLAZO GOD!";
   if (streak >= 5) return "ON FIRE!";
@@ -59,11 +85,19 @@ export default function HiLoGame() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [burst, setBurst] = useState(0);
   const [banked, setBanked] = useState<{ banked: number; fee: number } | null>(null);
+  const [market, setMarket] = useState<Market>("home");
   const lastResolved = useRef<string | null>(null);
-  // Snapshot of the featured match's real home win-probability the moment
-  // each round is first observed — the "lock" value every round resolves
-  // against. Keyed by round id so it survives re-renders untouched.
-  const lockSnapshots = useRef<Record<string, number>>({});
+  // Snapshot of the featured match's real selected-market probability the
+  // moment each round is first observed (or the market is switched) — the
+  // "lock" value every round resolves against. Keyed by round id so it
+  // survives re-renders untouched; stores which market it was captured for,
+  // so resolving a round always compares against the market it was locked to
+  // even if the player has since switched markets for the next round.
+  const lockSnapshots = useRef<Record<string, { market: Market; value: number }>>({});
+  // Timestamped recent values of the *currently selected* market's live
+  // number — the small history the "edge" readout diffs against.
+  const marketHistory = useRef<HistPoint[]>([]);
+  const historyMarket = useRef<Market>(market);
 
   useEffect(() => {
     setPlayer(loadPlayer());
@@ -73,8 +107,32 @@ export default function HiLoGame() {
   // exist. Idempotent (write-once per round id), so it's safe to run on
   // every render rather than chase effect timing.
   if (clock && world?.featured && lockSnapshots.current[clock.round.id] === undefined) {
-    lockSnapshots.current[clock.round.id] = world.featured.probs.home;
+    lockSnapshots.current[clock.round.id] = { market, value: world.featured.probs[market] };
   }
+
+  // Track recent history of the selected market's live value for the "edge"
+  // readout. Resets whenever the market changes (a fresh stat needs its own
+  // history) and otherwise only appends when the value actually moves.
+  useEffect(() => {
+    if (!world?.featured) return;
+    const value = world.featured.probs[market];
+    const now = Date.now();
+    if (historyMarket.current !== market) {
+      historyMarket.current = market;
+      marketHistory.current = [{ value, at: now }];
+      return;
+    }
+    const last = marketHistory.current[marketHistory.current.length - 1];
+    if (!last || last.value !== value) {
+      marketHistory.current = [...marketHistory.current, { value, at: now }].slice(-40);
+    }
+  }, [
+    market,
+    world?.featured,
+    world?.featured?.probs.home,
+    world?.featured?.probs.draw,
+    world?.featured?.probs.away,
+  ]);
 
   // resolve the previous round the moment the round id rolls over, comparing
   // the lock snapshot to the featured match's current real win-probability.
@@ -82,16 +140,16 @@ export default function HiLoGame() {
     if (!clock || !player || !world?.featured) return;
     if (!pick || pick.roundId === clock.round.id) return;
     if (lastResolved.current === pick.roundId) return;
-    const lockValue = lockSnapshots.current[pick.roundId];
-    if (lockValue === undefined) {
+    const snap = lockSnapshots.current[pick.roundId];
+    if (snap === undefined) {
       // Never got a snapshot for this round (feed dropped mid-round) — void it.
       lastResolved.current = pick.roundId;
       setPick(null);
       return;
     }
     lastResolved.current = pick.roundId;
-    const endValue = round1(world.featured.probs.home);
-    const av = round1(lockValue);
+    const endValue = round1(world.featured.probs[snap.market]);
+    const av = round1(snap.value);
     const push = endValue === av;
     const result: 1 | -1 | 0 = push ? 0 : endValue > av ? 1 : -1;
     const correct = !push && result === pick.choice;
@@ -109,7 +167,7 @@ export default function HiLoGame() {
       game: "hilo",
       fixtureId: world.featured.fixtureId,
       roundRef: pick.roundId,
-      pick: pick.choice === 1 ? "higher" : "lower",
+      pick: `${snap.market}-${pick.choice === 1 ? "higher" : "lower"}`,
       lockedProb: av,
       result: push ? "void" : correct ? "win" : "loss",
       delta: gained,
@@ -167,16 +225,30 @@ export default function HiLoGame() {
   const m = world.featured;
   const noOdds = m.odds.home === 0 && m.odds.draw === 0 && m.odds.away === 0;
   const noProbs = m.probs.home === 0 && m.probs.draw === 0 && m.probs.away === 0;
-  const lockValue = round1(lockSnapshots.current[round.id] ?? m.probs.home);
-  const liveValue = round1(m.probs.home);
+  const snapshot = lockSnapshots.current[round.id];
+  const lockValue = round1(snapshot?.value ?? m.probs[market]);
+  const liveValue = round1(m.probs[market]);
   const picked = pick?.roundId === round.id ? pick.choice : null;
   const mult = multiplier(player.streak);
   const ring = 2 * Math.PI * 44;
+  const marketName = market === "home" ? m.home.name : market === "away" ? m.away.name : "Draw";
+  const roundMs = round.endsAt - round.startedAt;
+  // Reconstruct "now" from the round clock's own progress rather than a fresh
+  // Date.now() call, so this stays a pure read of already-computed state.
+  const approxNow = round.startedAt + progress * roundMs;
+  const edgeRef = edgeReference(marketHistory.current, approxNow, roundMs);
+  const edgeDelta = edgeRef !== null ? round1(liveValue - edgeRef) : null;
 
   const choose = (choice: 1 | -1) => {
     if (picked || noProbs) return;
     setPick({ roundId: round.id, choice });
     setOutcome(null);
+  };
+
+  const chooseMarket = (mk: Market) => {
+    if (picked || noProbs || mk === market) return;
+    setMarket(mk);
+    lockSnapshots.current[round.id] = { market: mk, value: m.probs[mk] };
   };
 
   const bank = () => {
@@ -253,10 +325,44 @@ export default function HiLoGame() {
           </div>
         ) : (
           <>
+            {/* market selector */}
+            <div className="flex gap-2 px-5 pt-4">
+              {(["home", "draw", "away"] as Market[]).map((mk) => (
+                <button
+                  key={mk}
+                  type="button"
+                  onClick={() => chooseMarket(mk)}
+                  disabled={Boolean(picked)}
+                  className={`flex-1 rounded-full border py-1.5 text-[11px] font-bold uppercase tracking-widest transition-colors ${
+                    market === mk
+                      ? "border-volt bg-volt text-night"
+                      : picked
+                        ? "border-line text-muted opacity-50"
+                        : "border-line text-muted hover:border-volt/50 hover:text-chalk"
+                  }`}
+                >
+                  {MARKET_LABELS[mk]}
+                </button>
+              ))}
+            </div>
+
+            {/* edge readout */}
+            <div className="flex items-center justify-between px-5 pt-3 font-mono text-[11px] text-muted">
+              <span>edge · last ~{Math.round(roundMs / 1000)}s</span>
+              {edgeDelta === null ? (
+                <span>gathering data…</span>
+              ) : (
+                <span className={edgeDelta > 0 ? "text-up" : edgeDelta < 0 ? "text-down" : "text-muted"}>
+                  {edgeDelta > 0 ? "▲" : edgeDelta < 0 ? "▼" : "="} {Math.abs(edgeDelta).toFixed(1)}pp
+                  {Math.abs(edgeDelta) >= 1.5 ? " · market moving" : ""}
+                </span>
+              )}
+            </div>
+
             <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-5">
               <div>
                 <p className="text-sm text-muted">
-                  {m.home.name} win probability — higher or lower by the next tick?
+                  {marketName} win probability — higher or lower by the next tick?
                 </p>
                 <div className="mt-2 flex items-end gap-2">
                   <span className="font-mono text-5xl font-semibold tracking-tight">

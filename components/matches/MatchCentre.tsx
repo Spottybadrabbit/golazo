@@ -7,6 +7,8 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import FootballScene from "@/components/FootballScene";
 import { useLiveFeed } from "@/components/LiveDataProvider";
+import { useFavorites, type FavoritesApi } from "@/lib/favorites";
+import MerkleBadge from "@/components/MerkleBadge";
 import type { LiveMatch } from "@/lib/live-map";
 
 // Match Centre — LIVE ONLY. Every fixture, score, and odds line comes from the
@@ -37,6 +39,7 @@ function kickoffLabel(startTime: number | undefined, now: number): string {
 
 export default function MatchCentre() {
   const feed = useLiveFeed();
+  const fav = useFavorites();
   const [tab, setTab] = useState<Tab>("live");
   const [now, setNow] = useState<number | null>(null);
 
@@ -70,10 +73,19 @@ export default function MatchCentre() {
           Upcoming
         </TabButton>
       </div>
+
+      <Link
+        href="/pundit"
+        className="mb-4 flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3 text-sm font-bold text-chalk transition-colors hover:border-volt/50 hover:bg-volt/5 active:translate-y-px"
+      >
+        <span>🦜 Golo&apos;s takes</span>
+        <span className="text-muted">→</span>
+      </Link>
+
       {tab === "live" ? (
-        <LiveView featured={featured} live={liveNow} results={results} now={now} />
+        <LiveView featured={featured} live={liveNow} results={results} now={now} fav={fav} />
       ) : (
-        <UpcomingView upcoming={upcoming} now={now} />
+        <UpcomingView upcoming={upcoming} now={now} fav={fav} />
       )}
     </div>
   );
@@ -107,11 +119,13 @@ function LiveView({
   live,
   results,
   now,
+  fav,
 }: {
   featured: LiveMatch;
   live: LiveMatch[];
   results: LiveMatch[];
   now: number;
+  fav: FavoritesApi;
 }) {
   const m = featured;
   const liveState = isLive(m);
@@ -156,6 +170,11 @@ function LiveView({
         <span className="absolute left-4 top-4 rounded-full bg-night/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-chalk">
           {m.competition}
         </span>
+        <StarButton
+          active={fav.isFav(m.fixtureId)}
+          onClick={() => fav.toggle(m.fixtureId)}
+          className="absolute right-4 top-4 rounded-full bg-night/70 p-2"
+        />
       </div>
 
       {/* scoreline */}
@@ -203,6 +222,9 @@ function LiveView({
         )}
       </div>
 
+      {/* Miracle Tree — live Merkle root over this fixture's real odds ticks */}
+      <MerkleBadge fixtureId={m.fixtureId} />
+
       {/* real-only note: the free feed carries score + 1X2, not possession/shots */}
       <div className="mt-4 grid grid-cols-3 gap-3">
         <StatTile label="Home win" value={m.probs ? `${m.probs.home}%` : "—"} />
@@ -235,7 +257,7 @@ function LiveView({
           {live
             .filter((x) => x.fixtureId !== m.fixtureId)
             .map((x) => (
-              <FixtureRow key={x.fixtureId} m={x} now={now} live />
+              <FixtureRow key={x.fixtureId} m={x} now={now} live fav={fav} />
             ))}
         </Section>
       )}
@@ -243,7 +265,7 @@ function LiveView({
       {/* results / previous matches */}
       <Section title="Recent results">
         {results.length ? (
-          results.map((x) => <FixtureRow key={x.fixtureId} m={x} now={now} />)
+          results.map((x) => <FixtureRow key={x.fixtureId} m={x} now={now} fav={fav} />)
         ) : (
           <p className="rounded-2xl border border-line bg-surface p-4 font-mono text-[11px] leading-relaxed text-muted">
             No finished matches yet. As fixtures on the feed reach full-time, their real
@@ -257,7 +279,15 @@ function LiveView({
 
 /* ---------------- upcoming: real fixtures by date + 3D hero ---------------- */
 
-function UpcomingView({ upcoming, now }: { upcoming: LiveMatch[]; now: number }) {
+function UpcomingView({
+  upcoming,
+  now,
+  fav,
+}: {
+  upcoming: LiveMatch[];
+  now: number;
+  fav: FavoritesApi;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -318,7 +348,9 @@ function UpcomingView({ upcoming, now }: { upcoming: LiveMatch[]; now: number })
 
       <div className="mt-4 space-y-3">
         {upcoming.length ? (
-          upcoming.map((f, i) => <FixtureRow key={f.fixtureId} m={f} now={now} featured={i === 0} />)
+          upcoming.map((f, i) => (
+            <FixtureRow key={f.fixtureId} m={f} now={now} featured={i === 0} fav={fav} />
+          ))
         ) : (
           <p className="rounded-2xl border border-line bg-surface p-4 font-mono text-[11px] leading-relaxed text-muted">
             No upcoming fixtures on the feed right now.
@@ -339,11 +371,13 @@ function FixtureRow({
   now,
   featured,
   live,
+  fav,
 }: {
   m: LiveMatch;
   now: number;
   featured?: boolean;
   live?: boolean;
+  fav: FavoritesApi;
 }) {
   const label = live
     ? m.phase === "HT"
@@ -378,10 +412,50 @@ function FixtureRow({
           {m.away.code} {m.away.flag}
         </span>
       </div>
-      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted">
-        {m.competition}
-      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        <StarButton
+          active={fav.isFav(m.fixtureId)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            fav.toggle(m.fixtureId);
+          }}
+        />
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+          {m.competition}
+        </span>
+      </div>
     </Link>
+  );
+}
+
+function StarButton({
+  active,
+  onClick,
+  className,
+}: {
+  active: boolean;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={active ? "Remove from favorites" : "Add to favorites"}
+      aria-pressed={active}
+      className={`z-10 shrink-0 transition-transform active:scale-90 ${className ?? ""}`}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          d="M12 2.7l2.9 6.6 7.1.62-5.4 4.77 1.62 7-6.22-3.78-6.22 3.78 1.62-7-5.4-4.77 7.1-.62z"
+          fill={active ? "#AFFF00" : "none"}
+          stroke={active ? "#AFFF00" : "#9A9A92"}
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }
 
