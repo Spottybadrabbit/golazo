@@ -10,6 +10,7 @@ import HeroMascot from "@/components/HeroMascot";
 import LiveTicker from "@/components/LiveTicker";
 import SiteNav from "@/components/SiteNav";
 import { CARDS } from "@/lib/cards";
+import { matchSlug } from "@/lib/match";
 import { useLiveWorld } from "@/lib/useLiveWorld";
 
 export default function Landing() {
@@ -249,7 +250,16 @@ function DemoCard() {
             <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
             {m ? `LIVE ${m.minute}'` : "LIVE"}
           </span>
-          <span>{m ? `fixture ${m.fixtureId}` : "connecting"}</span>
+          {m ? (
+            <Link
+              href={`/match/${matchSlug(m)}`}
+              className="underline-offset-4 hover:text-chalk hover:underline"
+            >
+              fixture {m.fixtureId}
+            </Link>
+          ) : (
+            <span>connecting</span>
+          )}
         </div>
         <div className="mt-4 text-center">
           <div className="text-lg font-bold">

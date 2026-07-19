@@ -27,7 +27,7 @@ export async function GET() {
       nextTickAt: world.nextTickAt,
       marquee: "ENG v FRA",
       round: currentRound(world.now),
-      matches: matches.map((m) => ({
+      matches: world.matches.map((m) => ({
         fixtureId: m.fixtureId,
         home: m.home,
         away: m.away,
@@ -42,6 +42,6 @@ export async function GET() {
         events: m.events.slice(-6),
       })),
     },
-    { headers: { "Cache-Control": "no-store" } },
+    { headers },
   );
 }

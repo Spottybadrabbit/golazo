@@ -202,6 +202,11 @@ class TxlineClient {
   private scoresByFixture = new Map<number, ScoresFrame>();
   private oddsByFixture = new Map<number, OddsFrame>();
   private scoresFrameCount = 0;
+  // Per-fixture synthetic kickoff: the first time this client instance
+  // observed the fixture. Used to run a visible match clock for scheduled
+  // World Cup fixtures whose real StartTime is still in the future — see
+  // deriveMinute below.
+  private kickoffByFixture = new Map<number, number>();
 
   ensureStarted(): void {
     if (this.started) return;
@@ -460,7 +465,10 @@ class TxlineClient {
       ...this.scoresByFixture.keys(),
       ...this.oddsByFixture.keys(),
     ]);
-    const matches: MatchState[] = Array.from(fixtureIds).map((fixtureId, idx) =>
+    // Drop fixtures that are over/stale so the feed doesn't keep showing
+    // yesterday's games alongside the current ones.
+    const activeIds = Array.from(fixtureIds).filter((id) => !this.isStaleOrFinished(id, now));
+    const matches: MatchState[] = activeIds.map((fixtureId, idx) =>
       this.buildMatchState(fixtureId, idx, now),
     );
     const live = matches.filter((m) => m.phase === "LIVE");
@@ -497,6 +505,10 @@ class TxlineClient {
 
     const { probs, odds: matchOdds } = deriveOddsAndProbs(odds);
 
+    if (!this.kickoffByFixture.has(fixtureId)) this.kickoffByFixture.set(fixtureId, now);
+    const syntheticKickoff = this.kickoffByFixture.get(fixtureId)!;
+    const minute = deriveMinute(scores, now, syntheticKickoff);
+
     return {
       fixtureId,
       // TODO: "cycle"/"slot" are simulator-only bookkeeping (lib/engine's
@@ -506,8 +518,8 @@ class TxlineClient {
       slot: idx,
       home,
       away,
-      minute: deriveMinute(scores, now),
-      phase: derivePhase(scores?.GameState),
+      minute,
+      phase: derivePhase(scores?.GameState, minute),
       score,
       stats,
       probs,
@@ -519,6 +531,19 @@ class TxlineClient {
       events: [],
       sequence: scores?.Seq ?? 0,
     };
+  }
+
+  // Real StartTime older than this counts as stale/over, even without an
+  // authoritative "finished" GameState (see isStaleOrFinished).
+  private static readonly STALE_MS = 3 * 60 * 60 * 1000;
+
+  private isStaleOrFinished(fixtureId: number, now: number): boolean {
+    const scores = this.scoresByFixture.get(fixtureId);
+    const startTime = scores?.StartTime;
+    if (typeof startTime === "number" && now - startTime > TxlineClient.STALE_MS) return true;
+    const gs = scores?.GameState?.toUpperCase();
+    if (gs && (gs.includes("END") || gs.includes("FET"))) return true;
+    return false;
   }
 }
 
@@ -543,25 +568,57 @@ function sideStatsFrom(raw: SoccerScoreApi | undefined): SideStats {
   };
 }
 
-function deriveMinute(scores: ScoresFrame | undefined, now: number): number {
-  if (!scores?.StartTime) return 0;
+const MINUTE_CAP = 93; // 90' plus a little stoppage headroom
+
+function deriveMinute(
+  scores: ScoresFrame | undefined,
+  now: number,
+  syntheticKickoff: number,
+): number {
   // TODO: assuming StartTime/Ts are epoch-millis (unverified against a live
   // payload — the OpenAPI spec only says "format: int64").
-  const referenceTs = scores.Ts ?? now;
-  const elapsedMs = Math.max(0, referenceTs - scores.StartTime);
-  return Math.min(120, Math.round(elapsedMs / 60_000));
+  const startTime = scores?.StartTime;
+  let elapsedMs: number;
+  if (typeof startTime === "number" && startTime <= now) {
+    // Real kickoff has actually happened per StartTime — use real elapsed
+    // time.
+    const referenceTs = scores?.Ts ?? now;
+    elapsedMs = Math.max(0, referenceTs - startTime);
+  } else {
+    // StartTime missing or still in the future (a scheduled World Cup
+    // fixture) — run a synthetic clock from when this client instance first
+    // observed the fixture, so the match visibly ticks up from 0' instead of
+    // sitting frozen. This is a presentation clock only, not real match
+    // time, until TxLINE sends authoritative in-play frames.
+    elapsedMs = Math.max(0, now - syntheticKickoff);
+  }
+  return Math.min(MINUTE_CAP, Math.round(elapsedMs / 60_000));
 }
 
-function derivePhase(gameState: string | undefined): MatchPhase {
+function derivePhase(gameState: string | undefined, minute: number): MatchPhase {
   // TODO: SoccerFixtureStatus's enum codes (A2, C2, END, ET1, ET2, F2, FET,
   // FPE, H11, H21, HT2, HTET, I2, NS2, P, PE, TXCC2, TXCS2, WET, WPE) aren't
-  // documented with plain-English meanings in the vendored spec. This is a
-  // conservative best-effort heuristic, not a verified mapping.
-  if (!gameState) return "LIVE";
-  const gs = gameState.toUpperCase();
-  if (gs.includes("HT")) return "HT";
-  if (gs.includes("END")) return "FT";
-  if (gs.includes("NS")) return "BREAK";
+  // documented with plain-English meanings in the vendored spec. Only honor
+  // GameState when it maps onto one of these unambiguous coarse codes;
+  // otherwise fall back to the clock-driven state machine below.
+  if (gameState) {
+    const gs = gameState.toUpperCase();
+    if (gs.includes("HT")) return "HT";
+    if (gs.includes("END") || gs.includes("FET")) return "FT";
+    if (gs.includes("NS")) return "BREAK";
+    // GameState is present but doesn't map onto a coarse code we recognize
+    // (e.g. second-half in-play codes like "H21"). This is still an
+    // authoritative in-play signal, so treat it as LIVE rather than inferring
+    // FT/HT from the clock — routine stoppage time regularly pushes `minute`
+    // to >= 90 while the match is genuinely ongoing, and a clock-driven "FT"
+    // here would wrongly drop a live match out of the featured/live set.
+    return "LIVE";
+  }
+  // No authoritative state at all — progress LIVE -> HT (~45') ->
+  // LIVE (second half) -> FT (~90') off the running minute (see
+  // deriveMinute), so the UI still tells a coherent story.
+  if (minute >= 90) return "FT";
+  if (minute >= 45 && minute < 47) return "HT";
   return "LIVE";
 }
 

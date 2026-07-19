@@ -266,6 +266,10 @@ export interface LiveWorld {
   matches: MatchState[];
   featured: MatchState;
   nextTickAt: number;
+  /** Only set when this world came from GET /api/live (live feed mode); see
+   * lib/useLiveWorld.ts. The sim's own `liveWorld()` leaves it undefined and
+   * callers compute the Hi-Lo round locally instead. */
+  round?: HiLoRound;
 }
 
 const SLOTS = 2; // supporting fixtures alongside the marquee
