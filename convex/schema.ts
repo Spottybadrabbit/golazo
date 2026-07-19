@@ -266,4 +266,140 @@ export default defineSchema({
   })
     .index("by_clerk", ["clerkId"])
     .index("by_key", ["key"]),
+
+  // ════════════════════════════════════════════════════════════════════
+  // TOUCHLINE — autonomous sports-trading-intelligence audit trail.
+  //
+  // A separate product living in the same deployment as the Golazo fan app.
+  // Every table is prefixed `touchline*` so the two products never collide.
+  // These tables are the inspectable record behind each autonomous decision:
+  // raw ingest (matches/oddsTicks/scoreEvents) -> detection (signals) ->
+  // action (actions) -> verification (proofs). See convex/touchline.ts for
+  // the agentTick loop that writes them, and lib/touchline/* for the pure
+  // deterministic engine. (TOUCHLINE_PRD §17.)
+  // ════════════════════════════════════════════════════════════════════
+
+  // Latest state per monitored fixture (upserted each tick).
+  touchlineMatches: defineTable({
+    fixtureId: v.number(),
+    homeTeam: v.string(),
+    awayTeam: v.string(),
+    homeScore: v.number(),
+    awayScore: v.number(),
+    status: v.string(), // ACTIVE | FROZEN — Touchline's own simulated market state
+    minute: v.number(),
+    phase: v.optional(v.string()),
+    competition: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_fixture", ["fixtureId"]),
+
+  // Append-only odds history (normalized probabilities computed at write).
+  touchlineOddsTicks: defineTable({
+    fixtureId: v.number(),
+    homeOdds: v.number(),
+    drawOdds: v.number(),
+    awayOdds: v.number(),
+    homeProbability: v.number(),
+    drawProbability: v.number(),
+    awayProbability: v.number(),
+    timestamp: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_fixture_ts", ["fixtureId", "timestamp"]),
+
+  // Append-only discrete match events (goals, cards) with TxLINE sequence.
+  touchlineScoreEvents: defineTable({
+    fixtureId: v.number(),
+    sequence: v.number(),
+    action: v.string(), // GOAL | YELLOW | RED | KICKOFF | HT | FT ...
+    homeScore: v.number(),
+    awayScore: v.number(),
+    timestamp: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_fixture_ts", ["fixtureId", "timestamp"]),
+
+  // Detected market signals (the "why" behind an action).
+  touchlineSignals: defineTable({
+    fixtureId: v.number(),
+    type: v.union(
+      v.literal("EVENT_MARKET_DIVERGENCE"),
+      v.literal("UNEXPLAINED_PRICE_SHOCK"),
+    ),
+    severity: v.number(), // 0-100 risk score
+    probabilityBefore: v.number(),
+    probabilityAfter: v.number(),
+    triggerValue: v.number(), // observed move / volatility
+    threshold: v.number(), // configured threshold it breached
+    sequence: v.optional(v.number()), // TxLINE sequence of the triggering event
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_created", ["createdAt"]),
+
+  // Autonomous actions executed by the agent (all SIMULATED).
+  touchlineActions: defineTable({
+    signalId: v.optional(v.id("touchlineSignals")),
+    fixtureId: v.number(),
+    action: v.union(
+      v.literal("HOLD"),
+      v.literal("FREEZE_MARKET"),
+      v.literal("REOPEN_MARKET"),
+      v.literal("PAPER_HEDGE"),
+    ),
+    status: v.string(), // "EXECUTED"
+    reason: v.string(),
+    // PAPER_HEDGE detail (labelled simulated position)
+    notional: v.optional(v.number()),
+    executionPrice: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_created", ["createdAt"])
+    .index("by_signal", ["signalId"]),
+
+  // Solana verification results (honest state — never a fabricated ✓).
+  touchlineProofs: defineTable({
+    signalId: v.optional(v.id("touchlineSignals")),
+    fixtureId: v.number(),
+    sequence: v.number(),
+    network: v.string(), // "devnet"
+    validationMethod: v.string(), // e.g. "validateStatV2" | "merkleProof"
+    verified: v.boolean(),
+    detail: v.optional(v.string()), // human-readable reason (esp. when unavailable)
+    txRef: v.optional(v.string()), // on-chain account / signature reference
+    requestedAt: v.number(),
+    verifiedAt: v.optional(v.number()),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_signal", ["signalId"])
+    .index("by_created", ["requestedAt"]),
+
+  // Agent runtime config + status (singleton row, key="agent").
+  touchlineAgent: defineTable({
+    key: v.string(), // always "agent"
+    status: v.union(v.literal("ACTIVE"), v.literal("STOPPED")),
+    mode: v.union(v.literal("live"), v.literal("replay")),
+    replaySpeed: v.optional(v.number()), // 1 | 5 | 20
+    eventWindowSec: v.number(), // default 10
+    minReprice: v.number(), // default 0.05 (5%)
+    volatilityThreshold: v.number(), // default 0.08 (8%)
+    autoFreeze: v.boolean(),
+    autoHedge: v.boolean(),
+    solanaVerification: v.boolean(),
+    lastTickAt: v.optional(v.number()),
+    replayCursor: v.optional(v.number()), // ms position played through the replay timeline
+    replayStartedAt: v.optional(v.number()),
+    featuredFixtureId: v.optional(v.number()),
+    // Per-fixture agent runtime state (MVP monitors one featured fixture).
+    // Mirrors lib/touchline/runtime.ts AgentRuntime so a tick can resume.
+    marketStatus: v.optional(v.string()), // ACTIVE | FROZEN
+    prevProb: v.optional(v.number()), // last tick's home win probability
+    frozenAtProb: v.optional(v.number()),
+    lastEventProb: v.optional(v.number()), // home prob just before the last event
+    lastEventTs: v.optional(v.number()),
+    lastEventSeq: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 });

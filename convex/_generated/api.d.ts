@@ -18,6 +18,8 @@ import type * as poller from "../poller.js";
 import type * as pools from "../pools.js";
 import type * as profile from "../profile.js";
 import type * as teams from "../teams.js";
+import type * as touchline from "../touchline.js";
+import type * as touchlineVerify from "../touchlineVerify.js";
 import type * as txline from "../txline.js";
 import type * as wallet from "../wallet.js";
 
@@ -38,6 +40,8 @@ declare const fullApi: ApiFromModules<{
   pools: typeof pools;
   profile: typeof profile;
   teams: typeof teams;
+  touchline: typeof touchline;
+  touchlineVerify: typeof touchlineVerify;
   txline: typeof txline;
   wallet: typeof wallet;
 }>;
