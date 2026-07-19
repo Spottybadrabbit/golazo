@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { BallMark } from "@/components/SiteNav";
 import AuthButton from "@/components/AuthButton";
 import BottomTabs from "@/components/BottomTabs";
+import WalletChip from "@/components/WalletChip";
 
 const NAV = [
   { href: "/play", label: "Play" },
@@ -48,7 +49,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               );
             })}
           </nav>
-          <div className="shrink-0">
+          <div className="flex shrink-0 items-center gap-2">
+            <WalletChip />
             <AuthButton />
           </div>
         </div>

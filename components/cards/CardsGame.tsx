@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import Confetti from "@/components/Confetti";
 import FutCard from "@/components/cards/FutCard";
@@ -17,7 +18,7 @@ import {
   type CardDef,
   type Tier,
 } from "@/lib/cards";
-import { BADGES, loadPlayer, savePlayer, type PlayerState } from "@/lib/game";
+import { BADGES, loadPlayer, pushTx, savePlayer, type PlayerState } from "@/lib/game";
 import type { Fixture } from "@/lib/engine";
 
 function bestTier(cards: CardDef[]): Tier {
@@ -62,8 +63,13 @@ export default function CardsGame() {
     };
     const newBadges = BADGES.filter((b) => !player.badges.includes(b.id) && b.earned(next));
     next.badges = [...player.badges, ...newBadges.map((b) => b.id)];
-    savePlayer(next);
-    setPlayer(next);
+    const logged = pushTx(next, {
+      kind: "pack",
+      label: `Opened a pack · pulled ${cards.map((c) => c.code).join(" + ")}`,
+      goal: -PACK_COST,
+    });
+    savePlayer(logged);
+    setPlayer(logged);
     setPulled(cards);
     if (bestTier(cards) !== "bronze") setBurst(Date.now());
     setNote(newBadges.length ? `Badge unlocked: ${newBadges[0].name}` : null);
@@ -203,10 +209,21 @@ export default function CardsGame() {
             );
           })}
         </div>
-        <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
-          GOAL points come from banking Hi-Lo streaks. Cards live in your browser for the demo; on
-          mainnet they mint as compressed NFTs with TxLINE provenance.
-        </p>
+        <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <GlossyIcon name="bolt" tint="volt" size={30} />
+            <p className="text-[13px] leading-relaxed text-muted">
+              GOAL comes from banking Hi-Lo streaks. Cards live in your browser for the demo; on
+              mainnet they mint as compressed NFTs with TxLINE provenance.
+            </p>
+          </div>
+          <Link
+            href="/wallet"
+            className="shrink-0 rounded-full border border-line bg-night px-4 py-2 text-center text-xs font-semibold text-chalk transition-colors hover:border-volt/60 hover:text-volt"
+          >
+            View wallet &amp; history →
+          </Link>
+        </div>
       </section>
     </div>
   );

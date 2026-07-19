@@ -4,6 +4,18 @@
 // Persisted in localStorage for the demo; swap for a real backend when
 // real money enters the picture.
 
+export type TxKind = "connect" | "disconnect" | "bank" | "pack" | "win" | "reset";
+
+/** A single ledger entry — the history of money moving in and out. */
+export interface Tx {
+  id: string;
+  ts: number;
+  kind: TxKind;
+  label: string;
+  goal?: number; // signed change in GOAL points
+  sol?: number; // signed change in SOL
+}
+
 export interface PlayerState {
   handle: string | null;
   xp: number;
@@ -12,10 +24,14 @@ export interface PlayerState {
   picks: number;
   wins: number;
   goalPoints: number; // in-app currency earned by banking streaks
+  sol: number; // Solana balance in the connected wallet (simulated for the demo)
   badges: string[];
   wallet: string | null;
   lastRoundId: string | null;
   cards: Record<string, number>; // card id -> copies owned
+  ledger: Tx[]; // transaction history, newest first
+  sound: boolean; // settings: sound effects
+  reducedMotion: boolean; // settings: prefer reduced motion
 }
 
 const KEY = "golazo.player.v1";
@@ -28,10 +44,14 @@ export const FRESH: PlayerState = {
   picks: 0,
   wins: 0,
   goalPoints: 120,
+  sol: 0,
   badges: [],
   wallet: null,
   lastRoundId: null,
   cards: {},
+  ledger: [],
+  sound: true,
+  reducedMotion: false,
 };
 
 export function loadPlayer(): PlayerState {
@@ -125,7 +145,13 @@ export function bankStreak(p: PlayerState): { next: PlayerState; banked: number;
   const gross = p.streak * 25 * multiplier(p.streak);
   const fee = Math.ceil(gross * BANK_FEE);
   const banked = gross - fee;
-  return { next: { ...p, goalPoints: p.goalPoints + banked, streak: 0 }, banked, fee };
+  const settled: PlayerState = { ...p, goalPoints: p.goalPoints + banked, streak: 0 };
+  const next = pushTx(settled, {
+    kind: "bank",
+    label: `Banked a ${p.streak}-streak`,
+    goal: banked,
+  });
+  return { next, banked, fee };
 }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -138,4 +164,37 @@ export function mockWalletAddress(): string {
 
 export function shortAddress(a: string): string {
   return `${a.slice(0, 4)}..${a.slice(-4)}`;
+}
+
+// ---------- wallet + ledger ----------
+
+function txId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+/** Prepend a transaction to the ledger (capped so localStorage stays small). */
+export function pushTx(p: PlayerState, entry: Omit<Tx, "id" | "ts">): PlayerState {
+  const tx: Tx = { id: txId(), ts: Date.now(), ...entry };
+  return { ...p, ledger: [tx, ...(p.ledger ?? [])].slice(0, 60) };
+}
+
+/** Connect the (simulated) Solana wallet: mint an address + starter SOL float. */
+export function connectWallet(p: PlayerState): PlayerState {
+  const wallet = mockWalletAddress();
+  const sol = p.sol > 0 ? p.sol : Math.round((2 + Math.random() * 3) * 100) / 100;
+  return pushTx({ ...p, wallet, sol }, { kind: "connect", label: "Wallet connected", sol });
+}
+
+/** Disconnect the wallet but keep balances + history for when they return. */
+export function disconnectWallet(p: PlayerState): PlayerState {
+  return pushTx({ ...p, wallet: null }, { kind: "disconnect", label: "Wallet disconnected" });
+}
+
+/** Wipe demo progress back to a clean slate. */
+export function resetDemo(): PlayerState {
+  return { ...FRESH };
+}
+
+export function formatSol(n: number): string {
+  return `${n.toFixed(2)} SOL`;
 }
