@@ -1,28 +1,35 @@
 import { NextResponse } from "next/server";
-import { currentRound, liveWorld } from "@/lib/engine";
-import { fetchLiveMarquee, liveConfigured } from "@/lib/txline.server";
+import { currentRound } from "@/lib/engine";
+import { getFeed } from "@/lib/feed/adapter";
 
 // Server truth endpoint: the same deterministic engine the client runs,
-// exposed as JSON. When a TxLINE token is configured (TXLINE_MODE=live), the
-// featured England v France marquee is replaced with the real TxODDS feed;
-// everything else stays on the simulated engine. See lib/txline.server.ts.
-export async function GET() {
-  const world = liveWorld();
-  let mode: "sim" | "live" = "sim";
-  let matches = world.matches;
+// exposed as JSON. The active feed is chosen by TXLINE_MODE (see
+// lib/feed/adapter.ts): the deterministic simulator by default, or the real
+// TxODDS TxLINE feed when TXLINE_MODE=live. When the live feed isn't ready
+// yet we return 503 with `ready: false` so clients keep showing their last
+// known world instead of switching to a half-loaded one.
+export const dynamic = "force-dynamic";
 
-  if (liveConfigured()) {
-    const live = await fetchLiveMarquee();
-    if (live) {
-      mode = "live";
-      matches = [live, ...world.matches.slice(1)];
-    }
+export async function GET() {
+  const feed = getFeed();
+  const headers = { "Cache-Control": "no-store" };
+
+  if (feed.mode === "live" && !feed.ready) {
+    return NextResponse.json(
+      { mode: feed.mode, ready: false, detail: feed.detail },
+      { status: 503, headers },
+    );
   }
 
+  const world = await feed.getWorld();
   return NextResponse.json(
     {
-      mode,
-      source: mode === "live" ? "TxODDS TxLINE World Cup feed" : "deterministic simulation",
+      mode: feed.mode,
+      ready: true,
+      source:
+        feed.mode === "live"
+          ? "TxODDS TxLINE World Cup feed"
+          : "deterministic simulation",
       now: world.now,
       nextTickAt: world.nextTickAt,
       marquee: "ENG v FRA",
