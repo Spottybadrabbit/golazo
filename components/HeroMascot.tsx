@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 /**
@@ -8,20 +9,32 @@ import * as THREE from "three";
  * Volt glow, floating particles, contact shadow, and the mascot cutout each
  * sit at a different depth and move at a different rate on scroll and pointer,
  * so Golo drifts and tilts as you scroll the page. Static under reduced motion.
+ *
+ * A plain <Image> of Golo sits underneath as a guaranteed fallback: if WebGL is
+ * unavailable or the texture never loads, the mascot is still visible. The
+ * fallback fades out only once the 3D scene has actually painted the mascot.
  */
 export default function HeroMascot() {
   const mountRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch {
+      return; // WebGL unavailable — the static fallback image stays visible
+    }
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
     camera.position.z = 8;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);
 
@@ -82,17 +95,27 @@ export default function HeroMascot() {
     const mascot = new THREE.Group();
     scene.add(mascot);
     const loader = new THREE.TextureLoader();
-    loader.load("/assets/golo-hero.png", (tex) => {
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      const aspect = (tex.image as HTMLImageElement).width / (tex.image as HTMLImageElement).height;
-      const h = 5.4;
-      const plane = new THREE.Mesh(
-        new THREE.PlaneGeometry(h * aspect, h),
-        new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.04, depthWrite: false }),
-      );
-      mascot.add(plane);
-    });
+    loader.load(
+      "/assets/golo-hero.png",
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        const img = tex.image as HTMLImageElement;
+        const aspect = img.width / img.height;
+        const h = 5.4;
+        const plane = new THREE.Mesh(
+          new THREE.PlaneGeometry(h * aspect, h),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.04, depthWrite: false }),
+        );
+        mascot.add(plane);
+        setReady(true);
+        if (reduced) renderFrame(); // static mode: paint the mascot once it's in
+      },
+      undefined,
+      () => {
+        // texture failed to load — leave the static <Image> fallback showing
+      },
+    );
 
     // ---- interaction state ----
     let pointerX = 0;
@@ -174,9 +197,23 @@ export default function HeroMascot() {
       shadowTex.dispose();
       dustBack.geo.dispose();
       dustFront.geo.dispose();
-      mount.removeChild(renderer.domElement);
+      if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
   }, []);
 
-  return <div ref={mountRef} className="h-full w-full" aria-hidden="true" />;
+  return (
+    <div className="relative h-full w-full" aria-hidden="true">
+      <Image
+        src="/assets/golo-hero.png"
+        alt=""
+        fill
+        priority
+        sizes="(max-width: 1024px) 90vw, 40vw"
+        className={`pointer-events-none object-contain object-bottom transition-opacity duration-500 ${
+          ready ? "opacity-0" : "opacity-100"
+        }`}
+      />
+      <div ref={mountRef} className="relative h-full w-full" />
+    </div>
+  );
 }

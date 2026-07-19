@@ -1,28 +1,35 @@
 import { NextResponse } from "next/server";
 import { currentRound, liveWorld } from "@/lib/engine";
-import { fetchLiveMarquee, liveConfigured } from "@/lib/txline.server";
+import { fetchLiveMarquee } from "@/lib/txline.server";
 
-// Server truth endpoint: the same deterministic engine the client runs,
-// exposed as JSON. When a TxLINE token is configured (TXLINE_MODE=live), the
-// featured England v France marquee is replaced with the real TxODDS feed;
-// everything else stays on the simulated engine. See lib/txline.server.ts.
+// Server truth endpoint — LIVE ONLY. The simulator is no longer a fallback for
+// the featured match: the marquee comes from the real TxODDS TxLINE feed, and
+// if that feed is unavailable (no TXLINE_API_TOKEN / TXLINE_API_ORIGIN, or an
+// upstream outage) we return 503 rather than quietly serving simulated data.
+// Round timing and the surrounding slate still come from the deterministic
+// engine, which is the game clock — not a feed source.
 export async function GET() {
   const world = liveWorld();
-  let mode: "sim" | "live" = "sim";
-  let matches = world.matches;
+  const live = await fetchLiveMarquee();
 
-  if (liveConfigured()) {
-    const live = await fetchLiveMarquee();
-    if (live) {
-      mode = "live";
-      matches = [live, ...world.matches.slice(1)];
-    }
+  if (!live) {
+    return NextResponse.json(
+      {
+        mode: "live",
+        ready: false,
+        detail:
+          "TxLINE live feed unavailable. Set TXLINE_MODE=live, TXLINE_API_TOKEN and TXLINE_API_ORIGIN in the environment.",
+      },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
   }
 
+  const matches = [live, ...world.matches.slice(1)];
   return NextResponse.json(
     {
-      mode,
-      source: mode === "live" ? "TxODDS TxLINE World Cup feed" : "deterministic simulation",
+      mode: "live",
+      ready: true,
+      source: "TxODDS TxLINE World Cup feed",
       now: world.now,
       nextTickAt: world.nextTickAt,
       marquee: "ENG v FRA",
