@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import LiveDataProvider from "@/components/LiveDataProvider";
 import CelebrationProvider from "@/components/celebrate/Celebration";
+import OnboardingGate from "@/components/onboarding/OnboardingGate";
 import "./globals.css";
 
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
@@ -53,7 +54,10 @@ export default function RootLayout({
       <body className={`${outfit.variable} ${plexMono.variable} antialiased`}>
         <ConvexClientProvider>
           <LiveDataProvider>
-            <CelebrationProvider>{children}</CelebrationProvider>
+            <CelebrationProvider>
+              {children}
+              <OnboardingGate />
+            </CelebrationProvider>
           </LiveDataProvider>
         </ConvexClientProvider>
         <Analytics />
