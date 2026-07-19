@@ -13,6 +13,11 @@ export const metadata: Metadata = {
     "Autonomous World Cup market-monitoring agent. Ingests TxLINE odds and scores, detects anomalies, executes risk actions, and verifies data on Solana.",
 };
 
+// Touchline is a live, Convex-reactive dashboard — render on demand, never
+// statically prerender (which would try to run useQuery without a provider
+// when NEXT_PUBLIC_CONVEX_URL isn't present at build time).
+export const dynamic = "force-dynamic";
+
 const STYLES = `
 @keyframes tl-ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
 .tl-ping { animation: tl-ping 1.6s cubic-bezier(0,0,0.2,1) infinite; }
