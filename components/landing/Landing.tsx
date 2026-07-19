@@ -586,10 +586,11 @@ function FairData() {
           </p>
         </div>
         <div>
-          <h3 className="font-bold uppercase">Demo mode</h3>
+          <h3 className="font-bold uppercase">Real data, play money</h3>
           <p className="mt-2 text-sm leading-relaxed text-muted">
-            This build runs a simulated feed and play money. Flip TXLINE_MODE to live and the
-            same engine rides the real one.
+            GOLAZO runs on the live TxODDS TxLINE World Cup devnet feed — real
+            fixtures, odds, and scores. The markets are simulated and every
+            balance is play money. Real data, real adrenaline, zero risk.
           </p>
         </div>
       </div>
