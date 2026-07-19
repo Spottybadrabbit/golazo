@@ -114,7 +114,7 @@ function BalanceGrid({
   copy,
   copied,
 }: {
-  sol: string;
+  sol: React.ReactNode;
   goal: number;
   address: string;
   onLogout: () => void;
@@ -182,15 +182,20 @@ function useCopy(address: string | null) {
   return { copy, copied };
 }
 
-/** Real wallet via Clerk's Solana sign-in + live on-chain balance. */
+/** Real wallet via Clerk's Solana sign-in. The primary SOL figure is the
+ * reactive play-money `playBalance` (escrow + instant-settlement ledger) —
+ * the real on-chain devnet balance is fetched only for the small read-only
+ * secondary line below, and never overwrites the play-money figure. */
 function RealPanel({ player, update }: { player: PlayerState; update: (p: PlayerState) => void }) {
   const { isLoaded, user } = useUser();
   const { signOut } = useClerk();
   const address = user?.web3Wallets?.[0]?.web3Wallet ?? null;
   const { copy, copied } = useCopy(address);
+  const [chainSol, setChainSol] = useState<number | null>(null);
   const [balErr, setBalErr] = useState(false);
 
-  // Sync the real address in and pull the true on-chain SOL balance.
+  // Sync the real address in and pull the on-chain SOL balance for display
+  // only — it never feeds the play-money balance shown for betting.
   useEffect(() => {
     if (!address) return;
     let alive = true;
@@ -202,7 +207,7 @@ function RealPanel({ player, update }: { player: PlayerState; update: (p: Player
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("balance"))))
       .then((d: { sol?: number }) => {
         if (!alive) return;
-        if (typeof d.sol === "number") update({ ...loadPlayer(), wallet: address, sol: d.sol });
+        if (typeof d.sol === "number") setChainSol(d.sol);
         else setBalErr(true);
       })
       .catch(() => alive && setBalErr(true));
@@ -221,7 +226,7 @@ function RealPanel({ player, update }: { player: PlayerState; update: (p: Player
     return (
       <HeaderShell status="Solana · connected (live)">
         <BalanceGrid
-          sol={balErr ? "— SOL" : formatSol(player.sol)}
+          sol={<PlayBalanceValue fallback={player.sol} />}
           goal={player.goalPoints}
           address={address}
           onLogout={() => {
@@ -231,11 +236,7 @@ function RealPanel({ player, update }: { player: PlayerState; update: (p: Player
           copy={copy}
           copied={copied}
         />
-        {balErr && (
-          <p className="mt-2 font-mono text-[11px] text-down">
-            Couldn’t reach the Solana RPC for a live balance.
-          </p>
-        )}
+        <DevnetBalanceLine chainSol={chainSol} balErr={balErr} />
       </HeaderShell>
     );
   }
@@ -254,6 +255,35 @@ function RealPanel({ player, update }: { player: PlayerState; update: (p: Player
         </SignInButton>
       </div>
     </HeaderShell>
+  );
+}
+
+/** The primary SOL figure once signed in: the reactive Convex `playBalance`
+ * when Convex is configured (falling back to the local float while the query
+ * is loading), else the local demo float. Only calls `useQuery` when Convex
+ * is actually configured — same gating pattern as `TransactionHistory` below. */
+function PlayBalanceValue({ fallback }: { fallback: number }) {
+  if (!convexOn) return <>{formatSol(fallback)}</>;
+  return <ConvexPlayBalanceValue fallback={fallback} />;
+}
+
+function ConvexPlayBalanceValue({ fallback }: { fallback: number }) {
+  const balance = useQuery(api.wallet.playBalance);
+  return <>{formatSol(balance ?? fallback)}</>;
+}
+
+/** Small, clearly-separate read-only line for the real on-chain devnet
+ * balance — informational only, never used for betting or stake caps. */
+function DevnetBalanceLine({ chainSol, balErr }: { chainSol: number | null; balErr: boolean }) {
+  return (
+    <div className="mt-3 flex items-center justify-between rounded-xl border border-dashed border-line bg-night/30 px-4 py-2.5">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+        Devnet wallet (on-chain, read-only)
+      </span>
+      <span className="font-mono text-xs text-muted">
+        {balErr ? "— SOL" : chainSol === null ? "loading…" : formatSol(chainSol)}
+      </span>
+    </div>
   );
 }
 
@@ -302,7 +332,7 @@ export function BalanceCard({
   icon,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   tint: "volt" | "cyan";
   icon: "bolt" | "star";
 }) {

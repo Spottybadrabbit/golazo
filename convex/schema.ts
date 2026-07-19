@@ -162,6 +162,29 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_clerk", ["clerkId"]),
 
+  // ── Fast Hi-Lo escrow + instant settlement (play money, devnet only) ──
+  bets: defineTable({
+    clerkId: v.string(),
+    fixtureId: v.number(),
+    market: v.string(), // "home" | "draw" | "away"
+    direction: v.union(v.literal("higher"), v.literal("lower")),
+    stakeSol: v.number(),
+    lockedValue: v.number(),
+    multiplier: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("won"),
+      v.literal("lost"),
+      v.literal("void"),
+    ),
+    placedAt: v.number(),
+    roundEndsAt: v.number(),
+    settledAt: v.optional(v.number()),
+    payoutSol: v.optional(v.number()),
+  })
+    .index("by_clerk", ["clerkId"])
+    .index("by_status_clerk", ["status", "clerkId"]),
+
   // ── Sweepstakes: groups + members + invites ───────────────────────────
   pools: defineTable({
     inviteCode: v.string(), // short code for the shareable /sweepstakes/join/<code> link

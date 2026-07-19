@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useLiveFeed } from "@/components/LiveDataProvider";
 import { useCelebrate } from "@/components/celebrate/Celebration";
@@ -81,31 +81,16 @@ export default function BetSlip() {
   return convexOn && clerkOn ? <BetSlipCloud ctx={ctx} /> : <BetSlipLocal ctx={ctx} />;
 }
 
-/** Signed-in path: real devnet balance (read-only) for the stake cap, and a
- * Convex `placeBet` mutation that records the wager as a play-money ledger
- * spend + gamePlays position. No wallet is ever signed or transferred. */
+/** Signed-in path: the reactive play-money `playBalance` (escrow +
+ * instant-settlement ledger) for the stake cap, and a Convex `placeBet`
+ * mutation that records the wager as a play-money ledger spend + gamePlays
+ * position. No wallet is ever signed or transferred. */
 function BetSlipCloud({ ctx }: { ctx: BetContext }) {
   const { user } = useUser();
   const address = user?.web3Wallets?.[0]?.web3Wallet ?? null;
-  const [chainSol, setChainSol] = useState<number | null>(null);
+  const playBalance = useQuery(api.wallet.playBalance);
   const placeBet = useMutation(api.wallet.placeBet);
   const celebrate = useCelebrate();
-
-  useEffect(() => {
-    if (!address) return;
-    let alive = true;
-    fetch(`/api/balance?address=${encodeURIComponent(address)}&network=devnet`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("balance"))))
-      .then((d: { sol?: number }) => {
-        if (alive && typeof d.sol === "number") setChainSol(d.sol);
-      })
-      .catch(() => {
-        /* leave balance unknown; BetForm treats that as unvalidated */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [address]);
 
   if (!address) {
     return (
@@ -124,7 +109,14 @@ function BetSlipCloud({ ctx }: { ctx: BetContext }) {
     return { potentialPayout: result.potentialPayout };
   };
 
-  return <BetForm ctx={ctx} balance={chainSol ?? 0} balanceUnknown={chainSol === null} onSubmit={submit} />;
+  return (
+    <BetForm
+      ctx={ctx}
+      balance={playBalance ?? 0}
+      balanceUnknown={playBalance === undefined}
+      onSubmit={submit}
+    />
+  );
 }
 
 /** Signed-out (or Convex not configured) path: the local demo SOL float from

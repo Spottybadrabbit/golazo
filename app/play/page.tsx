@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
 import HiLoGame from "@/components/play/HiLoGame";
+import FastHiLo from "@/components/play/FastHiLo";
 import BetSlip from "@/components/play/BetSlip";
 
 export const metadata: Metadata = {
@@ -13,6 +14,7 @@ export default function PlayPage() {
     <AppShell>
       <h1 className="sr-only">Hi-Lo streak game</h1>
       <HiLoGame />
+      <FastHiLo />
       <BetSlip />
     </AppShell>
   );

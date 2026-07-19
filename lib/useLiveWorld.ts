@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { currentRound, type HiLoRound, type LiveWorld } from "@/lib/engine";
+import { useEffect, useState } from "react";
+import { type HiLoRound, type LiveWorld } from "@/lib/engine";
 import { buildLiveWorld, liveIsFresh } from "@/lib/live-map";
 import { useLiveFeed } from "@/components/LiveDataProvider";
 
@@ -35,26 +35,41 @@ export interface RoundClock {
   secondsLeft: number;
 }
 
+// Hi-Lo rounds are fixed 12-second windows on the wall clock, aligned to epoch
+// so every client shares the same round boundaries. This is a pure timer — it
+// always advances and can never get "stuck" (the old clock derived timing from
+// the simulator's cycle/slot math, which could return an already-ended round
+// and freeze the countdown at 0s). The value being called comes from the live
+// feed in the component; this only drives the tick/lock timing.
+const ROUND_MS = 12_000;
+
 /** The active Hi-Lo round plus a smooth rAF-driven countdown. */
 export function useRoundClock(): RoundClock | null {
   const [clock, setClock] = useState<RoundClock | null>(null);
-  const roundRef = useRef<HiLoRound | null>(null);
 
   useEffect(() => {
     let raf = 0;
     const loop = () => {
       const now = Date.now();
-      let round = roundRef.current;
-      if (!round || now >= round.endsAt) {
-        round = currentRound(now);
-        roundRef.current = round;
-      }
-      const total = round.endsAt - round.startedAt;
-      const progress = Math.min(1, Math.max(0, (now - round.startedAt) / total));
+      const idx = Math.floor(now / ROUND_MS);
+      const startedAt = idx * ROUND_MS;
+      const endsAt = startedAt + ROUND_MS;
+      const round: HiLoRound = {
+        id: `w-0-${idx}`,
+        fixtureId: 0,
+        stat: "WIN",
+        statLabel: "win probability",
+        question: "Higher or lower by the next tick?",
+        lockValue: 0,
+        unit: "%",
+        startedAt,
+        endsAt,
+        team: "",
+      };
       setClock({
         round,
-        progress,
-        secondsLeft: Math.max(0, Math.ceil((round.endsAt - now) / 1000)),
+        progress: Math.min(1, Math.max(0, (now - startedAt) / ROUND_MS)),
+        secondsLeft: Math.max(0, Math.ceil((endsAt - now) / 1000)),
       });
       raf = requestAnimationFrame(loop);
     };

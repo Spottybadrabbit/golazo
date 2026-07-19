@@ -155,14 +155,22 @@ function mapScore(records: TxScoreRecord[]): {
   };
   const home = num("Participant1Score", "HomeScore", "Score1", "score1", "part1");
   const away = num("Participant2Score", "AwayScore", "Score2", "score2", "part2");
-  const minute = num("Minute", "minute", "GameMinute", "clock");
+  // Minute comes from the feed's match Clock { Running, Seconds }; GameState can
+  // read "scheduled" even mid-match, so the Clock is the authoritative signal.
+  const clock = ((latest as unknown as { Clock?: { Running?: boolean; Seconds?: number } }).Clock ??
+    {}) as { Running?: boolean; Seconds?: number };
+  const minute =
+    typeof clock.Seconds === "number"
+      ? Math.floor(clock.Seconds / 60)
+      : num("Minute", "minute", "GameMinute");
+  const running = Boolean(clock.Running);
   const gs = String(latest.GameState ?? "").toLowerCase();
   const final = latest.Action === "game_finalised" || gs === "finished" || gs === "ft";
   const phase = final
     ? "FT"
     : gs === "halftime" || gs === "ht"
       ? "HT"
-      : gs === "inplay" || gs === "in_play" || gs === "live" || gs === "1sthalf" || gs === "2ndhalf"
+      : running || minute > 0
         ? "LIVE"
         : "BREAK";
   return { score: [home, away], minute, phase, final };
