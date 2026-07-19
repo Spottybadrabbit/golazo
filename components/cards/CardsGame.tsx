@@ -20,6 +20,7 @@ import {
 } from "@/lib/cards";
 import { BADGES, loadPlayer, pushTx, savePlayer, type PlayerState } from "@/lib/game";
 import type { Fixture } from "@/lib/engine";
+import { useCelebrate } from "@/components/celebrate/Celebration";
 
 function bestTier(cards: CardDef[]): Tier {
   return cards.reduce<Tier>(
@@ -29,6 +30,7 @@ function bestTier(cards: CardDef[]): Tier {
 }
 
 export default function CardsGame() {
+  const celebrate = useCelebrate();
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pulled, setPulled] = useState<CardDef[] | null>(null);
   const [packKey, setPackKey] = useState(0);
@@ -71,8 +73,19 @@ export default function CardsGame() {
     savePlayer(logged);
     setPlayer(logged);
     setPulled(cards);
-    if (bestTier(cards) !== "bronze") setBurst(Date.now());
+    const best = bestTier(cards);
+    if (best !== "bronze") setBurst(Date.now());
     setNote(newBadges.length ? `Badge unlocked: ${newBadges[0].name}` : null);
+    celebrate({
+      kind: "card",
+      title: best === "gold" ? "LEGEND PULL!" : best === "silver" ? "RARE PULL!" : "PACK OPENED!",
+      subtitle: newBadges[0]
+        ? `Badge unlocked: ${newBadges[0].name}`
+        : `You pulled ${cards.map((c) => c.code).join(" + ")}.`,
+      tiles: cards.slice(0, 3).map((c) => ({ label: "Pulled", value: c.code })),
+      tone: best === "gold" ? "legend" : best === "silver" ? "cyan" : "volt",
+      cta: "Add to collection",
+    });
   };
 
   const again = () => {

@@ -473,6 +473,7 @@ class TxlineClient {
       // no real "next tick" signal, so this just reuses the sim's TICK_MS as
       // a client-side polling hint.
       nextTickAt: now + TICK_MS,
+      source: "live",
     };
   }
 

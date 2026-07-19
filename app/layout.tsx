@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import LiveDataProvider from "@/components/LiveDataProvider";
+import CelebrationProvider from "@/components/celebrate/Celebration";
 import "./globals.css";
 
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
@@ -51,7 +52,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${outfit.variable} ${plexMono.variable} antialiased`}>
         <ConvexClientProvider>
-          <LiveDataProvider>{children}</LiveDataProvider>
+          <LiveDataProvider>
+            <CelebrationProvider>{children}</CelebrationProvider>
+          </LiveDataProvider>
         </ConvexClientProvider>
         <Analytics />
       </body>

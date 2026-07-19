@@ -16,6 +16,7 @@ import {
   type PlayerState,
 } from "@/lib/game";
 import { useLiveWorld, useRoundClock } from "@/lib/useLiveWorld";
+import { useCelebrate } from "@/components/celebrate/Celebration";
 
 type Pick = { roundId: string; choice: 1 | -1 };
 
@@ -39,9 +40,17 @@ const LOSE_LINES = [
 ];
 const PUSH_LINES = ["Dead level. Nobody wins, nobody cries. Again!"];
 
+function callTitle(streak: number): string {
+  if (streak >= 8) return "GOLAZO GOD!";
+  if (streak >= 5) return "ON FIRE!";
+  if (streak >= 3) return "HAT-TRICK!";
+  return "GOOOAL!";
+}
+
 export default function HiLoGame() {
   const world = useLiveWorld();
   const clock = useRoundClock();
+  const celebrate = useCelebrate();
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pick, setPick] = useState<Pick | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -76,10 +85,25 @@ export default function HiLoGame() {
       endValue: res.endValue,
       badge: newBadges[0]?.name,
     });
-    if (correct) setBurst(Date.now());
+    if (correct) {
+      setBurst(Date.now());
+      celebrate({
+        kind: "goal",
+        title: callTitle(next.streak),
+        subtitle: newBadges[0]
+          ? `Badge unlocked: ${newBadges[0].name}`
+          : `${next.streak} in a row. Keep the run alive!`,
+        tiles: [
+          { label: "XP", value: `+${gained}`, icon: "⚡️" },
+          { label: "Streak", value: String(next.streak), icon: "🔥" },
+          { label: "Boost", value: `${multiplier(next.streak)}x` },
+        ],
+        tone: next.streak >= 8 ? "legend" : "volt",
+      });
+    }
     setPick(null);
     setBanked(null);
-  }, [clock, pick, player]);
+  }, [clock, pick, player, celebrate]);
 
   if (!world || !clock || !player) {
     return (
@@ -112,6 +136,16 @@ export default function HiLoGame() {
     setPlayer(res.next);
     setBanked({ banked: res.banked, fee: res.fee });
     setBurst(Date.now());
+    celebrate({
+      kind: "bank",
+      title: "BANKED!",
+      subtitle: `You locked in a ${player.streak}-streak.`,
+      tiles: [
+        { label: "GOAL", value: `+${res.banked}`, icon: "💰" },
+        { label: "Fee", value: String(res.fee) },
+      ],
+      cta: "Sweet",
+    });
   };
 
   const line = outcome
