@@ -606,8 +606,15 @@ function derivePhase(gameState: string | undefined, minute: number): MatchPhase 
     if (gs.includes("HT")) return "HT";
     if (gs.includes("END") || gs.includes("FET")) return "FT";
     if (gs.includes("NS")) return "BREAK";
+    // GameState is present but doesn't map onto a coarse code we recognize
+    // (e.g. second-half in-play codes like "H21"). This is still an
+    // authoritative in-play signal, so treat it as LIVE rather than inferring
+    // FT/HT from the clock — routine stoppage time regularly pushes `minute`
+    // to >= 90 while the match is genuinely ongoing, and a clock-driven "FT"
+    // here would wrongly drop a live match out of the featured/live set.
+    return "LIVE";
   }
-  // No recognizable authoritative state — progress LIVE -> HT (~45') ->
+  // No authoritative state at all — progress LIVE -> HT (~45') ->
   // LIVE (second half) -> FT (~90') off the running minute (see
   // deriveMinute), so the UI still tells a coherent story.
   if (minute >= 90) return "FT";
