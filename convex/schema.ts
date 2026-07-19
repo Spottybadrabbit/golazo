@@ -32,5 +32,32 @@ export default defineSchema({
     sequence: v.optional(v.number()),
     solanaTx: v.optional(v.string()), // on-chain proof ref when settled via TxODDS
     createdAt: v.number(),
-  }).index("by_clerk", ["clerkId"]),
+  })
+    .index("by_clerk", ["clerkId"])
+    // Used by notify.usersInterestedIn to find who bet on / joined a fixture.
+    .index("by_fixture", ["fixtureId"]),
+
+  // Telegram chat linked to a Clerk user, so the cron notifier can reach them.
+  telegramLinks: defineTable({
+    clerkId: v.string(),
+    chatId: v.string(),
+    linkedAt: v.number(),
+  })
+    .index("by_clerk", ["clerkId"])
+    .index("by_chat", ["chatId"]),
+
+  // One-time codes minted in-app ("Connect Telegram") and redeemed by the bot
+  // webhook via `/start <code>`. Expire after 30 minutes (see notify.ts).
+  telegramLinkCodes: defineTable({
+    code: v.string(),
+    clerkId: v.string(),
+    createdAt: v.number(),
+  }).index("by_code", ["code"]),
+
+  // Dedup ledger so each match event notifies a given user at most once.
+  notified: defineTable({
+    clerkId: v.string(),
+    key: v.string(),
+    sentAt: v.number(),
+  }).index("by_clerk_key", ["clerkId", "key"]),
 });
