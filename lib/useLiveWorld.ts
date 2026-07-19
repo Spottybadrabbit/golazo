@@ -7,21 +7,27 @@ import {
   type HiLoRound,
   type LiveWorld,
 } from "@/lib/engine";
+import { buildLiveWorld, liveIsFresh } from "@/lib/live-map";
+import { useLiveFeed } from "@/components/LiveDataProvider";
 
 /**
- * Client heartbeat: recomputes the deterministic world every second so the
- * whole UI moves fluidly between feed ticks. Returns null until mounted
+ * Client heartbeat. Prefers the reactive Convex live feed (real TxODDS data)
+ * when it is present and fresh; otherwise recomputes the deterministic
+ * simulator every second so the UI still moves. Returns null until mounted
  * (server markup stays time-independent, avoiding hydration drift).
  */
 export function useLiveWorld(): LiveWorld | null {
-  const [world, setWorld] = useState<LiveWorld | null>(null);
+  const feed = useLiveFeed();
+  const [sim, setSim] = useState<LiveWorld | null>(null);
   useEffect(() => {
-    const update = () => setWorld(liveWorld());
+    const update = () => setSim(liveWorld());
     update();
     const id = setInterval(update, 1000);
     return () => clearInterval(id);
   }, []);
-  return world;
+
+  if (liveIsFresh(feed, Date.now())) return buildLiveWorld(feed, Date.now());
+  return sim;
 }
 
 export interface RoundClock {

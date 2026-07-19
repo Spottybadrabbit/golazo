@@ -266,6 +266,7 @@ export interface LiveWorld {
   matches: MatchState[];
   featured: MatchState;
   nextTickAt: number;
+  source: "sim" | "live";
 }
 
 const SLOTS = 2; // supporting fixtures alongside the marquee
@@ -293,7 +294,13 @@ export function liveWorld(now: number = Date.now()): LiveWorld {
   // The England v France marquee is always the featured game.
   const matches = [marquee, ...others];
   const sincePeriod = (now - EPOCH) % TICK_MS;
-  return { now, matches, featured: marquee, nextTickAt: now + (TICK_MS - sincePeriod) };
+  return {
+    now,
+    matches,
+    featured: marquee,
+    nextTickAt: now + (TICK_MS - sincePeriod),
+    source: "sim",
+  };
 }
 
 // ---------- match centre ----------

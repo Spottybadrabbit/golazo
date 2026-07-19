@@ -33,4 +33,45 @@ export default defineSchema({
     solanaTx: v.optional(v.string()), // on-chain proof ref when settled via TxODDS
     createdAt: v.number(),
   }).index("by_clerk", ["clerkId"]),
+
+  // ── live TxODDS feed (written by the poller, read by the app) ──
+  liveFixtures: defineTable({
+    fixtureId: v.number(),
+    homeCode: v.string(),
+    homeName: v.string(),
+    homeFlag: v.string(),
+    awayCode: v.string(),
+    awayName: v.string(),
+    awayFlag: v.string(),
+    homeGoals: v.number(),
+    awayGoals: v.number(),
+    minute: v.optional(v.number()),
+    statusId: v.optional(v.number()),
+    phase: v.string(), // LIVE | HT | FT | SCHED
+    inPlay: v.boolean(),
+    competition: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_updated", ["updatedAt"]),
+
+  liveTicks: defineTable({
+    fixtureId: v.number(),
+    ts: v.number(),
+    oddsHome: v.number(),
+    oddsDraw: v.number(),
+    oddsAway: v.number(),
+    pHome: v.number(),
+    pDraw: v.number(),
+    pAway: v.number(),
+  }).index("by_fixture_ts", ["fixtureId", "ts"]),
+
+  // singleton heartbeat / featured pointer for the poll loop
+  pollState: defineTable({
+    key: v.string(), // always "global"
+    mode: v.string(), // sim | live
+    lastPollAt: v.number(),
+    featuredFixtureId: v.optional(v.number()),
+    note: v.optional(v.string()),
+  }).index("by_key", ["key"]),
 });

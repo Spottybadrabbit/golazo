@@ -11,6 +11,7 @@ const TABS = [
   { href: "/cards", label: "Cards", icon: CardsIcon },
   { href: "/squad", label: "Squad", icon: SquadIcon },
   { href: "/pundit", label: "Pundit", icon: ChatIcon },
+  { href: "/wallet", label: "Wallet", icon: WalletIcon },
 ];
 
 /** Shared chrome for app routes: slim top bar + thumb-first bottom tabs. */
@@ -94,6 +95,17 @@ function SquadIcon({ active }: { active: boolean }) {
       <circle cx="8.2" cy="8.6" r="2.9" stroke={c} strokeWidth="2" />
       <path d="M14.6 13.7c1.9.2 3.9 1.3 3.9 3V18" stroke={c} strokeWidth="2" strokeLinecap="round" />
       <circle cx="14.9" cy="8.9" r="2.4" stroke={c} strokeWidth="2" />
+    </svg>
+  );
+}
+
+function WalletIcon({ active }: { active: boolean }) {
+  const c = active ? "#AFFF00" : "#9A9A92";
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <rect x="3" y="5.5" width="16" height="12" rx="2.5" stroke={c} strokeWidth="2" />
+      <path d="M3 9h16" stroke={c} strokeWidth="2" />
+      <circle cx="15.5" cy="13" r="1.4" fill={c} />
     </svg>
   );
 }
