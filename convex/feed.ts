@@ -157,10 +157,13 @@ export const live = query({
     const matches = fixtures.map(toLiveMatch);
 
     const inPlay = (m: (typeof matches)[number]) => m.phase === "LIVE" || m.phase === "HT";
+    // Always feature the best REAL match: a World Cup game with odds wins over a
+    // stale poll pointer (which can drift to a no-odds friendly on a transient
+    // odds-fetch miss). Only honor the pointer if it actually has odds/in-play.
     const featured =
-      matches.find((m) => m.fixtureId === state?.featuredFixtureId) ??
       matches.find((m) => isWorldCup(m.competition) && m.odds && inPlay(m)) ??
       matches.find((m) => isWorldCup(m.competition) && m.odds) ??
+      matches.find((m) => m.fixtureId === state?.featuredFixtureId && (m.odds || inPlay(m))) ??
       matches.find((m) => m.odds && inPlay(m)) ??
       matches.find((m) => m.odds) ??
       matches[0] ??

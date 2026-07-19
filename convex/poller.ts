@@ -114,7 +114,10 @@ export const poll = internalAction({
           });
         }
 
-        await ctx.runMutation(internal.feed.upsertFixture, {
+        // Only send the odds/prob fields when we actually have fresh odds this
+        // poll. A patch with `oddsHome: undefined` would DELETE the stored odds,
+        // so on a transient odds-fetch miss we omit them and keep last-known.
+        const upsertArgs: Record<string, unknown> = {
           fixtureId: fx.fixtureId,
           homeCode: home.code,
           homeName: home.name,
@@ -129,14 +132,18 @@ export const poll = internalAction({
           phase,
           inPlay,
           competition: fx.competition,
-          oddsHome: oHome,
-          oddsDraw: oDraw,
-          oddsAway: oAway,
-          pHome,
-          pDraw,
-          pAway,
           startTime: fx.startTime,
-        });
+        };
+        if (odds) {
+          upsertArgs.oddsHome = oHome;
+          upsertArgs.oddsDraw = oDraw;
+          upsertArgs.oddsAway = oAway;
+          upsertArgs.pHome = pHome;
+          upsertArgs.pDraw = pDraw;
+          upsertArgs.pAway = pAway;
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await ctx.runMutation(internal.feed.upsertFixture, upsertArgs as any);
 
         if (inPlay) anyInPlay = true;
         candidates.push({
