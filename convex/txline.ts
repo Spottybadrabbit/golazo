@@ -185,6 +185,7 @@ export interface TxScore {
   minute: number | null;
   statusId: number | null;
   final: boolean;
+  running: boolean;
 }
 
 // Tolerant numeric read from the score record's `Data` object; returns
@@ -246,8 +247,26 @@ export function mapScore(raw: any): TxScore {
   const data = pick(rec, "Data", "data") ?? {};
   const stats = pick(rec, "Stats", "stats") ?? {};
   const goals = extractGoals(rec);
-  const minuteRaw = numFromData({ ...stats, ...data }, "Minute", "minute", "GameMinute", "clock");
-  const minute = minuteRaw === undefined ? null : minuteRaw;
+
+  // Match minute comes from the feed's Clock: { Running, Seconds } (elapsed match
+  // time). Trailing heartbeat/coverage records can carry Seconds:0 with the
+  // highest Seq, so take the MAX Seconds across all records. GameState stays
+  // "scheduled" mid-match, so the Clock is the authoritative in-play signal.
+  let maxSeconds = 0;
+  let running = false;
+  for (const rr of records) {
+    const c = pick(rr, "Clock", "clock");
+    const secs = typeof c?.Seconds === "number" ? c.Seconds : typeof c?.seconds === "number" ? c.seconds : 0;
+    if (secs > maxSeconds) maxSeconds = secs;
+    if (c?.Running ?? c?.running) running = true;
+  }
+  const minuteFromData = numFromData({ ...stats, ...data }, "Minute", "minute", "GameMinute");
+  const minute =
+    maxSeconds > 0
+      ? Math.floor(maxSeconds / 60)
+      : minuteFromData === undefined
+        ? null
+        : minuteFromData;
 
   const statusId = pick(rec, "StatusId", "statusId", "status");
   const action = String(pick(rec, "Action", "action") ?? "");
@@ -270,6 +289,7 @@ export function mapScore(raw: any): TxScore {
     minute,
     statusId: statusId === undefined ? null : Number(statusId),
     final,
+    running,
   };
 }
 
@@ -285,9 +305,10 @@ export async function fetchScore(fixtureId: number): Promise<TxScore | null> {
 // ---- in-play detection ----
 export function isInPlay(fx: TxFixture, odds: TxOdds | null, score: TxScore | null): boolean {
   if (score?.final) return false;
+  // The match Clock is authoritative — GameState can read "scheduled" even while
+  // the clock is running, so trust the clock/minute before anything else.
+  if (score?.running || (score?.minute ?? 0) > 0) return true;
   if (odds?.inRunning) return true;
-  if (fx.gameState === 1 || fx.gameState === 6) return false; // scheduled / cancelled
-  if (score && (score.minute ?? 0) > 0 && !score.final) return true;
   return false;
 }
 

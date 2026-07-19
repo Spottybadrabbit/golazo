@@ -316,7 +316,7 @@ export default function HiLoGame() {
       {/* the round card */}
       <div className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
         <div className="flex items-center justify-between border-b border-line px-4 py-2.5 font-mono text-[11px] uppercase tracking-widest text-muted">
-          <span>Round {round.id.split("-")[2]}</span>
+          <span>Round {Number(round.id.split("-")[2] ?? 0) % 1000}</span>
           <span>next tick in {secondsLeft}s</span>
         </div>
         {noProbs ? (

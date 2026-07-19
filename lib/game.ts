@@ -252,3 +252,44 @@ export function placeBetLocal(
   );
   return { next, potentialPayout };
 }
+
+/**
+ * Local (signed-out / Convex-unreachable) equivalent of Convex `placeFastBet`
+ * for the Fast Hi-Lo micro-prediction loop (components/play/FastHiLo.tsx):
+ * escrows the stake immediately by deducting it from the simulated SOL float.
+ * Play-money only, mirrors placeBetLocal's shape.
+ */
+export function placeFastBetLocal(
+  p: PlayerState,
+  opts: { market: "home" | "draw" | "away"; direction: "higher" | "lower"; stakeSol: number },
+): PlayerState {
+  return pushTx(
+    { ...p, sol: Math.round((p.sol - opts.stakeSol) * 1e4) / 1e4 },
+    {
+      kind: "bet",
+      label: `Fast Hi-Lo ${opts.direction} ${opts.market}`,
+      sol: -opts.stakeSol,
+    },
+  );
+}
+
+/**
+ * Local (signed-out / Convex-unreachable) equivalent of Convex `settleFastBet`:
+ * credits a win payout or a void refund back into the simulated SOL float. A
+ * loss needs no ledger entry — the stake was already forfeited at placement.
+ */
+export function settleFastBetLocal(
+  p: PlayerState,
+  opts: { stakeSol: number; payoutSol: number; result: "won" | "lost" | "void" },
+): PlayerState {
+  if (opts.result === "lost") return p;
+  const credit = opts.result === "void" ? opts.stakeSol : opts.payoutSol;
+  return pushTx(
+    { ...p, sol: Math.round((p.sol + credit) * 1e4) / 1e4 },
+    {
+      kind: "win",
+      label: opts.result === "void" ? "Fast Hi-Lo void — stake refunded" : "Fast Hi-Lo win",
+      sol: credit,
+    },
+  );
+}

@@ -354,6 +354,25 @@ body {
   animation: rip-flash 0.7s ease-out forwards;
 }
 
+/* splash greeting — "Hi, I'm Golo!" pops in with a scale/settle bounce */
+@keyframes hi-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.hi-pop {
+  animation: hi-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marquee-track,
   .marquee-fast,
@@ -368,7 +387,8 @@ body {
   .walkout,
   .pack-pop,
   .burst-beam,
-  .rip-flash {
+  .rip-flash,
+  .hi-pop {
     animation: none !important;
   }
   .flip-inner {

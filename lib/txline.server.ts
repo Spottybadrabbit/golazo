@@ -155,14 +155,27 @@ function mapScore(records: TxScoreRecord[]): {
   };
   const home = num("Participant1Score", "HomeScore", "Score1", "score1", "part1");
   const away = num("Participant2Score", "AwayScore", "Score2", "score2", "part2");
-  const minute = num("Minute", "minute", "GameMinute", "clock");
+  // Minute comes from the feed's match Clock { Running, Seconds }. Trailing
+  // heartbeat/coverage records can carry Seconds:0 with the highest Seq, so take
+  // the MAX Seconds across all records (the furthest match time) rather than
+  // just the newest record. GameState stays "scheduled" mid-match, so the Clock
+  // is the authoritative in-play signal.
+  let maxSeconds = 0;
+  let anyRunning = false;
+  for (const r of records) {
+    const c = (r as unknown as { Clock?: { Running?: boolean; Seconds?: number } }).Clock;
+    if (c && typeof c.Seconds === "number" && c.Seconds > maxSeconds) maxSeconds = c.Seconds;
+    if (c?.Running) anyRunning = true;
+  }
+  const minute = maxSeconds > 0 ? Math.floor(maxSeconds / 60) : num("Minute", "minute", "GameMinute");
+  const running = anyRunning;
   const gs = String(latest.GameState ?? "").toLowerCase();
   const final = latest.Action === "game_finalised" || gs === "finished" || gs === "ft";
   const phase = final
     ? "FT"
     : gs === "halftime" || gs === "ht"
       ? "HT"
-      : gs === "inplay" || gs === "in_play" || gs === "live" || gs === "1sthalf" || gs === "2ndhalf"
+      : running || minute > 0
         ? "LIVE"
         : "BREAK";
   return { score: [home, away], minute, phase, final };

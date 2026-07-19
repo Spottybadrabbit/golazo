@@ -76,9 +76,12 @@ export default function GoloSplash() {
         playsInline
         autoPlay
         preload="auto"
-        className="h-[46vh] max-h-[420px] w-auto object-contain drop-shadow-[0_0_40px_rgba(175,255,0,0.25)]"
+        className="h-[62vh] max-h-[560px] w-auto object-contain drop-shadow-[0_0_40px_rgba(175,255,0,0.25)]"
       />
       <div className="mt-2 flex flex-col items-center gap-3">
+        <p className="hi-pop text-2xl font-extrabold text-chalk sm:text-3xl">
+          Hi, I&apos;m <span className="text-volt">Golo</span>!
+        </p>
         <h1 className="text-4xl font-extrabold uppercase tracking-tighter text-chalk sm:text-5xl">
           GO<span className="text-volt">LAZO</span>
         </h1>

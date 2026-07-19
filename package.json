@@ -13,7 +13,8 @@
     "txline:wallet": "node scripts/txline/create-service-wallet.mjs",
     "txline:idl": "node scripts/txline/fetch-idl.mjs",
     "txline:prove": "node scripts/txline/prove-connection.mjs",
-    "hilo:test": "tsx scripts/hilo-edge.test.mts"
+    "touchline:test": "tsx scripts/touchline/engine.test.mts",
+    "touchline:test:replay": "tsx scripts/touchline/replay.test.mts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.20",
