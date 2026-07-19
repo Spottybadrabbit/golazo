@@ -3,10 +3,8 @@
 // GOLAZO collectible player cards. Cards map to real World Cup nations; each
 // nation's signature player is minted at a metal tier — gold / silver / bronze
 // — set by that nation's global FIFA ranking and the player's rating, exactly
-// like FIFA Ultimate Team. Tomorrow's pack only contains players from the
-// nations kicking off tomorrow (see lib/engine tomorrowFixtures).
-
-import { tomorrowFixtures, type Fixture } from "@/lib/engine";
+// like FIFA Ultimate Team. The pack only contains players from nations with a
+// real fixture live on the TxLINE feed right now (see poolFromTeams below).
 
 export type Tier = "bronze" | "silver" | "gold";
 
@@ -160,20 +158,15 @@ export function statRows(s: CardStats): [string, number][] {
   ];
 }
 
-/** Tomorrow's fixtures (for the pack header). */
-export function tomorrowSlate(now: number = Date.now()): Fixture[] {
-  return tomorrowFixtures(now);
-}
-
-/** The player pool for tomorrow's pack: every nation kicking off tomorrow. */
-export function tomorrowPool(now: number = Date.now()): CardDef[] {
-  const codes = new Set<string>();
-  for (const f of tomorrowFixtures(now)) {
-    codes.add(f.home.code);
-    codes.add(f.away.code);
-  }
-  const pool = [...codes].map((c) => BY_CODE.get(c)).filter((c): c is CardDef => Boolean(c));
-  return pool.length ? pool : CARDS;
+/**
+ * The player pool for today's pack: only nations with a real fixture live on
+ * the TxLINE feed right now. Teams without a preset card (not one of the 16
+ * seeded nations) simply don't contribute a card — no fabricated players are
+ * synthesized for them. An empty result means an honest "no pack yet" state.
+ */
+export function poolFromTeams(teams: { code: string }[]): CardDef[] {
+  const codes = new Set(teams.map((t) => t.code));
+  return CARDS.filter((c) => codes.has(c.code));
 }
 
 /** Draw one card from a pool, weighted by tier. */

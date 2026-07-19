@@ -6,23 +6,75 @@ import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import FootballScene from "@/components/FootballScene";
-import { englandMatch, tomorrowFixtures, type Fixture, type MatchState } from "@/lib/engine";
+import { useLiveFeed } from "@/components/LiveDataProvider";
+import type { LiveMatch } from "@/lib/live-map";
 
-type Tab = "today" | "tomorrow";
+// Match Centre — LIVE ONLY. Every fixture, score, and odds line comes from the
+// real TxODDS feed (Convex `feed.live`). Fixtures are bucketed by their real
+// kickoff time into Live / Upcoming / Results, so the marquee is always the
+// match that is actually next, never a hardcoded one. No simulator.
+
+type Tab = "live" | "upcoming";
+
+const TWO_HOURS = 2 * 60 * 60 * 1000;
+const isLive = (m: LiveMatch) => m.phase === "LIVE" || m.phase === "HT";
+const isFinished = (m: LiveMatch) => m.phase === "FT";
+
+function kickoffLabel(startTime: number | undefined, now: number): string {
+  if (!startTime) return "TBD";
+  const d = new Date(startTime);
+  const day0 = new Date(startTime);
+  day0.setHours(0, 0, 0, 0);
+  const today0 = new Date(now);
+  today0.setHours(0, 0, 0, 0);
+  const diff = Math.round((day0.getTime() - today0.getTime()) / 86_400_000);
+  const t = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diff === 0) return `Today · ${t}`;
+  if (diff === 1) return `Tomorrow · ${t}`;
+  if (diff === -1) return `Yesterday · ${t}`;
+  return `${d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} · ${t}`;
+}
 
 export default function MatchCentre() {
-  const [tab, setTab] = useState<Tab>("today");
+  const feed = useLiveFeed();
+  const [tab, setTab] = useState<Tab>("live");
+  const [now, setNow] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (now === null) return <CentreLoading />;
+
+  const matches = feed?.matches ?? [];
+  if (!feed || feed.mode !== "live" || matches.length === 0) {
+    return <AwaitingFeed />;
+  }
+
+  const featured = feed.featured ?? matches.find((m) => m.odds) ?? matches[0];
+  const liveNow = matches.filter(isLive);
+  const upcoming = matches
+    .filter((m) => !isLive(m) && !isFinished(m))
+    .sort((a, b) => (a.startTime ?? 0) - (b.startTime ?? 0));
+  const results = matches.filter(isFinished).sort((a, b) => (b.startTime ?? 0) - (a.startTime ?? 0));
+
   return (
     <div>
       <div className="mb-4 flex gap-2 rounded-full border border-line bg-surface p-1">
-        <TabButton active={tab === "today"} onClick={() => setTab("today")}>
-          Today · Live
+        <TabButton active={tab === "live"} onClick={() => setTab("live")}>
+          {liveNow.length ? "Live now" : "Next up"}
         </TabButton>
-        <TabButton active={tab === "tomorrow"} onClick={() => setTab("tomorrow")}>
-          Tomorrow
+        <TabButton active={tab === "upcoming"} onClick={() => setTab("upcoming")}>
+          Upcoming
         </TabButton>
       </div>
-      {tab === "today" ? <Today /> : <Tomorrow />}
+      {tab === "live" ? (
+        <LiveView featured={featured} live={liveNow} results={results} now={now} />
+      ) : (
+        <UpcomingView upcoming={upcoming} now={now} />
+      )}
     </div>
   );
 }
@@ -48,95 +100,117 @@ function TabButton({
   );
 }
 
-/* ---------------- today: England live ---------------- */
+/* ---------------- live / next featured match ---------------- */
 
-function Today() {
-  const [match, setMatch] = useState<MatchState | null>(null);
-  useEffect(() => {
-    const update = () => setMatch(englandMatch());
-    update();
-    const id = setInterval(update, 1000);
-    return () => clearInterval(id);
-  }, []);
+function LiveView({
+  featured,
+  live,
+  results,
+  now,
+}: {
+  featured: LiveMatch;
+  live: LiveMatch[];
+  results: LiveMatch[];
+  now: number;
+}) {
+  const m = featured;
+  const liveState = isLive(m);
+  const status = liveState
+    ? m.phase === "HT"
+      ? "HALF-TIME"
+      : `LIVE ${m.minute}'`
+    : isFinished(m)
+      ? "FULL-TIME"
+      : kickoffLabel(m.startTime, now).toUpperCase();
 
-  if (!match) {
-    return (
-      <div className="flex h-72 items-center justify-center">
-        <div className="animate-pulse font-mono text-sm text-muted">Loading the big one...</div>
-      </div>
-    );
-  }
-
-  const last = match.events[match.events.length - 1];
-  const line =
-    match.phase === "LIVE"
-      ? `Golo here, live from ${match.home.name} v ${match.away.name}. ${
-          last?.type === "GOAL" ? "GOOOOL just now!" : "Pressure building, stay sharp."
-        }`
-      : `Full time. ${match.home.code} ${match.score[0]}-${match.score[1]} ${match.away.code}. What a watch.`;
+  const line = liveState
+    ? `Golo here, live from ${m.home.name} v ${m.away.name}. Every tick counts — stay sharp.`
+    : isFinished(m)
+      ? `Full time. ${m.home.code} ${m.score[0]}-${m.score[1]} ${m.away.code}. What a watch.`
+      : `Next up: ${m.home.name} v ${m.away.name}, ${kickoffLabel(m.startTime, now)}. Odds are live — get your call in.`;
 
   return (
     <div>
-      {/* themed banner */}
+      {/* banner */}
       <div className="relative overflow-hidden rounded-2xl border border-line">
         <Image
-          src="/assets/match-eng.jpg"
-          alt="England versus their rival under the lights"
+          src="/assets/pitch-dawn.jpg"
+          alt="Stadium under the lights"
           width={2200}
           height={1229}
           priority
-          className="h-48 w-full object-cover object-top sm:h-60"
+          className="h-48 w-full object-cover object-center sm:h-60"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-night via-night/50 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
           <div className="flex items-center gap-2 font-mono text-xs text-chalk">
-            <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
-            {match.phase === "LIVE" ? `LIVE ${match.minute}'` : match.phase}
+            <span
+              className={`live-dot inline-block h-2 w-2 rounded-full ${liveState ? "bg-volt" : "bg-muted"}`}
+            />
+            {status}
           </div>
           <span className="rounded-full bg-volt px-3 py-1 font-mono text-[11px] font-bold text-night">
-            MATCH OF THE DAY
+            {liveState ? "LIVE NOW" : "NEXT UP"}
           </span>
         </div>
+        <span className="absolute left-4 top-4 rounded-full bg-night/70 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-chalk">
+          {m.competition}
+        </span>
       </div>
 
       {/* scoreline */}
       <div className="mt-4 rounded-2xl border border-line bg-surface p-5">
         <div className="flex items-center justify-between">
-          <Side flag={match.home.flag} code={match.home.code} name={match.home.name} />
+          <Side flag={m.home.flag} code={m.home.code} name={m.home.name} />
           <div className="text-center">
             <div className="font-mono text-5xl font-semibold tracking-tight">
-              {match.score[0]}
+              {m.score[0]}
               <span className="text-muted"> : </span>
-              {match.score[1]}
+              {m.score[1]}
             </div>
-            <div className="mt-1 font-mono text-[11px] text-muted">
-              1X2 {match.odds.home.toFixed(2)} / {match.odds.draw.toFixed(2)} /{" "}
-              {match.odds.away.toFixed(2)}
-            </div>
+            {m.odds ? (
+              <div className="mt-1 font-mono text-[11px] text-muted">
+                1X2 {m.odds.home.toFixed(2)} / {m.odds.draw.toFixed(2)} / {m.odds.away.toFixed(2)}
+              </div>
+            ) : (
+              <div className="mt-1 font-mono text-[11px] text-muted">odds pending</div>
+            )}
           </div>
-          <Side flag={match.away.flag} code={match.away.code} name={match.away.name} right />
+          <Side flag={m.away.flag} code={m.away.code} name={m.away.name} right />
         </div>
-        {/* probability split */}
-        <div className="mt-5 flex h-2.5 overflow-hidden rounded-full bg-night">
-          <div className="h-full bg-volt" style={{ width: `${match.probs.home}%` }} />
-          <div className="h-full bg-muted/50" style={{ width: `${match.probs.draw}%` }} />
-          <div className="h-full bg-cyan" style={{ width: `${match.probs.away}%` }} />
-        </div>
-        <div className="mt-1.5 flex justify-between font-mono text-[11px] text-muted">
-          <span>{match.home.code} {match.probs.home}%</span>
-          <span>draw {match.probs.draw}%</span>
-          <span>{match.away.code} {match.probs.away}%</span>
-        </div>
+
+        {m.probs ? (
+          <>
+            <div className="mt-5 flex h-2.5 overflow-hidden rounded-full bg-night">
+              <div className="h-full bg-volt" style={{ width: `${m.probs.home}%` }} />
+              <div className="h-full bg-muted/50" style={{ width: `${m.probs.draw}%` }} />
+              <div className="h-full bg-cyan" style={{ width: `${m.probs.away}%` }} />
+            </div>
+            <div className="mt-1.5 flex justify-between font-mono text-[11px] text-muted">
+              <span>
+                {m.home.code} {m.probs.home}%
+              </span>
+              <span>draw {m.probs.draw}%</span>
+              <span>
+                {m.away.code} {m.probs.away}%
+              </span>
+            </div>
+          </>
+        ) : (
+          <p className="mt-5 text-center font-mono text-[11px] text-muted">
+            Win probabilities open when the market prices this fixture.
+          </p>
+        )}
       </div>
 
-      {/* live stat tiles */}
+      {/* real-only note: the free feed carries score + 1X2, not possession/shots */}
       <div className="mt-4 grid grid-cols-3 gap-3">
-        <StatTile label="Possession" value={`${match.stats[0].possession}%`} />
-        <StatTile label="Shots" value={`${match.stats[0].shots}-${match.stats[1].shots}`} />
-        <StatTile label="Pressure" value={String(match.pressure)} accent />
+        <StatTile label="Home win" value={m.probs ? `${m.probs.home}%` : "—"} />
+        <StatTile label="Score" value={`${m.score[0]}-${m.score[1]}`} />
+        <StatTile label="Away win" value={m.probs ? `${m.probs.away}%` : "—"} accent />
       </div>
 
-      {/* volt Golo commentary */}
+      {/* Golo commentary */}
       <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface p-3">
         <Image
           src="/assets/mascot-volt.jpg"
@@ -154,7 +228,169 @@ function Today() {
       >
         Call the next tick
       </Link>
+
+      {/* other live matches */}
+      {live.filter((x) => x.fixtureId !== m.fixtureId).length > 0 && (
+        <Section title="Also live">
+          {live
+            .filter((x) => x.fixtureId !== m.fixtureId)
+            .map((x) => (
+              <FixtureRow key={x.fixtureId} m={x} now={now} live />
+            ))}
+        </Section>
+      )}
+
+      {/* results / previous matches */}
+      <Section title="Recent results">
+        {results.length ? (
+          results.map((x) => <FixtureRow key={x.fixtureId} m={x} now={now} />)
+        ) : (
+          <p className="rounded-2xl border border-line bg-surface p-4 font-mono text-[11px] leading-relaxed text-muted">
+            No finished matches yet. As fixtures on the feed reach full-time, their real
+            results land here.
+          </p>
+        )}
+      </Section>
     </div>
+  );
+}
+
+/* ---------------- upcoming: real fixtures by date + 3D hero ---------------- */
+
+function UpcomingView({ upcoming, now }: { upcoming: LiveMatch[]; now: number }) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) return;
+    gsap.registerPlugin(ScrollTrigger);
+    const ctx = gsap.context(() => {
+      gsap.to("[data-pitch]", {
+        yPercent: 14,
+        ease: "none",
+        scrollTrigger: { trigger: "[data-hero3d]", start: "top top", end: "bottom top", scrub: 0.6 },
+      });
+      gsap.utils.toArray<HTMLElement>("[data-fx]").forEach((el, i) => {
+        gsap.fromTo(
+          el,
+          { y: 30, opacity: 0.6 },
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.5,
+            ease: "power2.out",
+            scrollTrigger: { trigger: el, start: "top 94%" },
+            delay: (i % 6) * 0.03,
+          },
+        );
+      });
+    }, rootRef);
+    return () => ctx.revert();
+  }, [upcoming.length]);
+
+  return (
+    <div ref={rootRef}>
+      <div
+        data-hero3d
+        className="relative h-72 overflow-hidden rounded-2xl border border-line sm:h-80"
+      >
+        <div data-pitch className="absolute inset-[-8%] will-change-transform">
+          <Image
+            src="/assets/pitch-dawn.jpg"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover opacity-70"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-night via-night/40 to-night/10" />
+        </div>
+        <div className="absolute inset-0">
+          <FootballScene />
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-volt">Upcoming</p>
+          <h1 className="text-2xl font-extrabold uppercase tracking-tight">
+            {upcoming.length} fixture{upcoming.length === 1 ? "" : "s"} on the feed
+          </h1>
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {upcoming.length ? (
+          upcoming.map((f, i) => <FixtureRow key={f.fixtureId} m={f} now={now} featured={i === 0} />)
+        ) : (
+          <p className="rounded-2xl border border-line bg-surface p-4 font-mono text-[11px] leading-relaxed text-muted">
+            No upcoming fixtures on the feed right now.
+          </p>
+        )}
+      </div>
+      <p className="mt-3 font-mono text-[11px] leading-relaxed text-muted">
+        Streaks and squad pools open the moment each fixture kicks off on the TxLINE feed.
+      </p>
+    </div>
+  );
+}
+
+/* ---------------- shared bits ---------------- */
+
+function FixtureRow({
+  m,
+  now,
+  featured,
+  live,
+}: {
+  m: LiveMatch;
+  now: number;
+  featured?: boolean;
+  live?: boolean;
+}) {
+  const label = live
+    ? m.phase === "HT"
+      ? "HT"
+      : `LIVE ${m.minute}'`
+    : isFinished(m)
+      ? "FT"
+      : kickoffLabel(m.startTime, now);
+  return (
+    <Link
+      href={`/play`}
+      data-fx
+      className={`flex items-center justify-between rounded-2xl border p-4 transition-colors ${
+        featured
+          ? "border-volt bg-volt/10 shadow-[0_0_24px_rgba(175,255,0,0.18)]"
+          : "border-line bg-surface hover:border-volt/40"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span
+          className={`shrink-0 rounded-md px-2 py-1 font-mono text-[11px] ${
+            live ? "bg-volt text-night" : featured ? "bg-volt text-night" : "bg-night text-muted"
+          }`}
+        >
+          {label}
+        </span>
+        <span className="truncate font-bold">
+          {m.home.flag} {m.home.code}
+          <span className="mx-1.5 font-mono text-xs text-muted">
+            {isFinished(m) || live ? `${m.score[0]}-${m.score[1]}` : "v"}
+          </span>
+          {m.away.code} {m.away.flag}
+        </span>
+      </div>
+      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted">
+        {m.competition}
+      </span>
+    </Link>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mt-8">
+      <h2 className="mb-3 font-mono text-xs uppercase tracking-[0.2em] text-muted">{title}</h2>
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
 
@@ -187,113 +423,28 @@ function StatTile({ label, value, accent }: { label: string; value: string; acce
   );
 }
 
-/* ---------------- tomorrow: 3D football + fixtures ---------------- */
-
-function Tomorrow() {
-  const [fixtures, setFixtures] = useState<Fixture[]>([]);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setFixtures(tomorrowFixtures());
-  }, []);
-
-  useEffect(() => {
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduced) return;
-    gsap.registerPlugin(ScrollTrigger);
-    const ctx = gsap.context(() => {
-      gsap.to("[data-pitch]", {
-        yPercent: 14,
-        ease: "none",
-        scrollTrigger: { trigger: "[data-hero3d]", start: "top top", end: "bottom top", scrub: 0.6 },
-      });
-      gsap.utils.toArray<HTMLElement>("[data-fx]").forEach((el, i) => {
-        gsap.fromTo(
-          el,
-          { y: 30, opacity: 0.6 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.5,
-            ease: "power2.out",
-            scrollTrigger: { trigger: el, start: "top 94%" },
-            delay: (i % 6) * 0.03,
-          },
-        );
-      });
-    }, rootRef);
-    return () => ctx.revert();
-  }, [fixtures]);
-
+function CentreLoading() {
   return (
-    <div ref={rootRef}>
-      {/* parallax 3D football hero */}
-      <div
-        data-hero3d
-        className="relative h-72 overflow-hidden rounded-2xl border border-line sm:h-80"
-      >
-        <div data-pitch className="absolute inset-[-8%] will-change-transform">
-          <Image
-            src="/assets/pitch-dawn.jpg"
-            alt=""
-            fill
-            priority
-            sizes="100vw"
-            className="object-cover opacity-70"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-night via-night/40 to-night/10" />
-        </div>
-        <div className="absolute inset-0">
-          <FootballScene />
-        </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 p-4">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-volt">Tomorrow</p>
-          <h1 className="text-2xl font-extrabold uppercase tracking-tight">
-            {fixtures.length} fixtures on the slate
-          </h1>
-        </div>
-      </div>
+    <div className="flex h-72 items-center justify-center">
+      <div className="animate-pulse font-mono text-sm text-muted">Loading the feed…</div>
+    </div>
+  );
+}
 
-      {/* fixtures list */}
-      <div className="mt-4 space-y-3">
-        {fixtures.map((f) => (
-          <div
-            key={f.fixtureId}
-            data-fx
-            className={`flex items-center justify-between rounded-2xl border p-4 ${
-              f.featured
-                ? "border-volt bg-volt/10 shadow-[0_0_24px_rgba(175,255,0,0.18)]"
-                : "border-line bg-surface"
-            }`}
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <span
-                className={`rounded-md px-2 py-1 font-mono text-[11px] ${
-                  f.featured ? "bg-volt text-night" : "bg-night text-muted"
-                }`}
-              >
-                {f.time}
-              </span>
-              <span className="truncate font-bold">
-                {f.home.flag} {f.home.code}
-                <span className="mx-1.5 font-mono text-xs text-muted">v</span>
-                {f.away.code} {f.away.flag}
-              </span>
-            </div>
-            {f.featured ? (
-              <span className="shrink-0 font-mono text-[10px] font-bold uppercase tracking-widest text-volt">
-                Headliner
-              </span>
-            ) : (
-              <span className="font-mono text-[11px] uppercase tracking-widest text-muted">
-                Grp {f.group}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="mt-3 font-mono text-[11px] leading-relaxed text-muted">
-        Streaks and squad pools open the moment each fixture kicks off on the TxLINE feed.
+function AwaitingFeed() {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-8 text-center">
+      <Image
+        src="/assets/mascot-volt.jpg"
+        alt="Golo waiting"
+        width={72}
+        height={72}
+        className="bob mx-auto rounded-2xl"
+      />
+      <h2 className="mt-4 text-xl font-extrabold uppercase tracking-tight">Awaiting the feed</h2>
+      <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted">
+        No live TxODDS fixtures are streaming right now. The moment the feed prices a match, it
+        shows up here — real scores, real odds, no filler.
       </p>
     </div>
   );

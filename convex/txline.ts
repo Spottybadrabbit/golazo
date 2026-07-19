@@ -199,6 +199,38 @@ function numFromData(data: any, ...keys: string[]): number | undefined {
   return undefined;
 }
 
+// Best-effort goal extraction. The in-play shape is unconfirmed until kickoff,
+// so we cast a wide net: known key names on Data + Stats, then a
+// case-insensitive contains scan, then a "1-0"/"1:0" Score/Result string.
+function extractGoals(rec: any): { home?: number; away?: number } {
+  const data = pick(rec, "Data", "data") ?? {};
+  const stats = pick(rec, "Stats", "stats") ?? {};
+  const bag: any = { ...stats, ...data };
+  let home = numFromData(bag, "Participant1Score", "HomeScore", "Home", "Score1", "score1", "part1", "p1");
+  let away = numFromData(bag, "Participant2Score", "AwayScore", "Away", "Score2", "score2", "part2", "p2");
+  if (home === undefined && away === undefined) {
+    for (const [k, v] of Object.entries(bag)) {
+      const key = k.toLowerCase();
+      const n =
+        typeof v === "number"
+          ? v
+          : typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))
+            ? Number(v)
+            : undefined;
+      if (n === undefined) continue;
+      const scoreish = key.includes("score") || key.includes("goal");
+      if (scoreish && (key.includes("1") || key.includes("home") || key.includes("part1"))) home = n;
+      if (scoreish && (key.includes("2") || key.includes("away") || key.includes("part2"))) away = n;
+    }
+  }
+  if (home === undefined && away === undefined) {
+    const s = String(pick(rec, "Score", "score", "Result", "result") ?? "");
+    const m = s.match(/(\d+)\s*[-:]\s*(\d+)/);
+    if (m) return { home: Number(m[1]), away: Number(m[2]) };
+  }
+  return { home, away };
+}
+
 export function mapScore(raw: any): TxScore {
   // score snapshot is an array of records; take the latest by Seq, then Ts.
   const records: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
@@ -212,9 +244,9 @@ export function mapScore(raw: any): TxScore {
       )[0] ?? {};
 
   const data = pick(rec, "Data", "data") ?? {};
-  const homeGoals = numFromData(data, "Participant1Score", "HomeScore", "Score1", "score1", "part1") ?? 0;
-  const awayGoals = numFromData(data, "Participant2Score", "AwayScore", "Score2", "score2", "part2") ?? 0;
-  const minuteRaw = numFromData(data, "Minute", "minute", "GameMinute", "clock");
+  const stats = pick(rec, "Stats", "stats") ?? {};
+  const goals = extractGoals(rec);
+  const minuteRaw = numFromData({ ...stats, ...data }, "Minute", "minute", "GameMinute", "clock");
   const minute = minuteRaw === undefined ? null : minuteRaw;
 
   const statusId = pick(rec, "StatusId", "statusId", "status");
@@ -222,9 +254,19 @@ export function mapScore(raw: any): TxScore {
   const gs = String(pick(rec, "GameState", "game_state") ?? "").toLowerCase();
   const final = action === "game_finalised" || gs === "finished" || gs === "ft";
 
+  // Self-diagnose at kickoff: if a record carries payload but we couldn't read
+  // goals, log the real shape once so the key names can be pinned fast.
+  const populated = Object.keys(data).length + Object.keys(stats).length > 0;
+  if (populated && goals.home === undefined && goals.away === undefined) {
+    console.warn(
+      "[txline mapScore] populated record, goals unresolved:",
+      JSON.stringify({ Data: data, Stats: stats }).slice(0, 600),
+    );
+  }
+
   return {
-    homeGoals,
-    awayGoals,
+    homeGoals: goals.home ?? 0,
+    awayGoals: goals.away ?? 0,
     minute,
     statusId: statusId === undefined ? null : Number(statusId),
     final,

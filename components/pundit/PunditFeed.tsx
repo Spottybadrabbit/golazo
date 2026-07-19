@@ -2,7 +2,18 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { punditFeed, type PunditMessage } from "@/lib/engine";
+import { useLiveWorld } from "@/lib/useLiveWorld";
+
+// Golo · PunditBot — LIVE ONLY. Commentary is generated from the real featured
+// match on the TxODDS feed: kickoff, goals, phase changes, and win-probability
+// swings. No simulated feed.
+
+interface Msg {
+  id: string;
+  text: string;
+  kind: "event" | "note";
+  at: number;
+}
 
 function timeLabel(at: number): string {
   const d = new Date(at);
@@ -10,40 +21,94 @@ function timeLabel(at: number): string {
 }
 
 export default function PunditFeed() {
-  const [msgs, setMsgs] = useState<PunditMessage[] | null>(null);
-  const [typing, setTyping] = useState(false);
+  const world = useLiveWorld();
+  const m = world?.featured ?? null;
+  const [msgs, setMsgs] = useState<Msg[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
-  const known = useRef<Set<string>>(new Set());
+  const seq = useRef(0);
+  const last = useRef<{
+    fixtureId?: number;
+    score?: string;
+    phase?: string;
+    pHome?: number;
+  }>({});
+
+  const push = (text: string, kind: Msg["kind"]) =>
+    setMsgs((prev) => [
+      ...prev.slice(-14),
+      { id: `${Date.now()}-${seq.current++}`, text, kind, at: Date.now() },
+    ]);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const update = () => {
-      const feed = punditFeed(Date.now(), 16);
-      const fresh = feed.some((f) => !known.current.has(f.id));
-      if (fresh && known.current.size > 0) {
-        // brief typing indicator before the new message lands
-        setTyping(true);
-        timer = setTimeout(() => {
-          setTyping(false);
-          setMsgs(feed);
-          feed.forEach((f) => known.current.add(f.id));
-        }, 900);
-      } else {
-        setMsgs(feed);
-        feed.forEach((f) => known.current.add(f.id));
+    if (!m) return;
+    const L = last.current;
+
+    // New match in focus → reset + intro.
+    if (L.fixtureId !== m.fixtureId) {
+      last.current = { fixtureId: m.fixtureId };
+      const opener =
+        m.phase === "LIVE"
+          ? `we're live, ${m.minute}' on the clock`
+          : m.phase === "FT"
+            ? "full time, let's break it down"
+            : m.phase === "HT"
+              ? "half time"
+              : "team news is in, kickoff soon";
+      push(`Golo here on ${m.home.name} v ${m.away.name} — ${opener}.`, "note");
+      if (m.probs) {
+        push(
+          `Market read: ${m.home.code} ${m.probs.home}% · draw ${m.probs.draw}% · ${m.away.code} ${m.probs.away}%.`,
+          "note",
+        );
+        last.current.pHome = m.probs.home;
       }
-    };
-    update();
-    const id = setInterval(update, 4000);
-    return () => {
-      clearInterval(id);
-      if (timer) clearTimeout(timer);
-    };
-  }, []);
+      last.current.score = `${m.score[0]}-${m.score[1]}`;
+      last.current.phase = m.phase;
+      return;
+    }
+
+    // Goal.
+    const score = `${m.score[0]}-${m.score[1]}`;
+    if (L.score !== undefined && L.score !== score) {
+      push(`GOOOAL! ${m.home.code} ${m.score[0]}-${m.score[1]} ${m.away.code}. Market's about to move.`, "event");
+    }
+    L.score = score;
+
+    // Phase change.
+    if (L.phase !== undefined && L.phase !== m.phase) {
+      const t =
+        m.phase === "LIVE"
+          ? "And we're underway!"
+          : m.phase === "HT"
+            ? "That's the half-time whistle."
+            : m.phase === "FT"
+              ? "Full time. What a watch."
+              : "";
+      if (t) push(t, "event");
+    }
+    L.phase = m.phase;
+
+    // Win-probability swing.
+    if (m.probs) {
+      const p = m.probs.home;
+      if (L.pHome === undefined) {
+        L.pHome = p;
+      } else if (Math.abs(p - L.pHome) >= 1.5) {
+        const up = p > L.pHome;
+        push(
+          `${m.home.code} ${up ? "climbing" : "drifting"} — win prob now ${p}%. ${
+            up ? "HIGHER's looking tasty." : "LOWER callers, this is your window."
+          }`,
+          "note",
+        );
+        L.pHome = p;
+      }
+    }
+  }, [m?.fixtureId, m?.score?.[0], m?.score?.[1], m?.phase, m?.probs?.home, m?.minute, m]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [msgs, typing]);
+  }, [msgs]);
 
   return (
     <div>
@@ -61,7 +126,7 @@ export default function PunditFeed() {
           <h1 className="text-lg font-extrabold tracking-tight">Golo · PunditBot</h1>
           <p className="flex items-center gap-2 font-mono text-xs text-muted">
             <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
-            watching the TxLINE feed for you
+            {m ? `watching ${m.home.code} v ${m.away.code}` : "watching the TxLINE feed"}
           </p>
         </div>
         <a
@@ -81,9 +146,9 @@ export default function PunditFeed() {
 
       {/* feed */}
       <div className="mt-4 space-y-3">
-        {!msgs ? (
-          <div className="animate-pulse rounded-2xl border border-line bg-surface p-6 text-center font-mono text-sm text-muted">
-            Golo is clearing his throat...
+        {msgs.length === 0 ? (
+          <div className="rounded-2xl border border-line bg-surface p-6 text-center font-mono text-sm text-muted">
+            {m ? "Golo is clearing his throat…" : "Golo is waiting for the feed to price a match…"}
           </div>
         ) : (
           msgs.map((msg) => (
@@ -97,9 +162,7 @@ export default function PunditFeed() {
               />
               <div
                 className={`max-w-[85%] rounded-2xl rounded-bl-md border px-4 py-2.5 text-sm leading-relaxed ${
-                  msg.kind === "event"
-                    ? "border-volt/50 bg-volt/10"
-                    : "border-line bg-surface"
+                  msg.kind === "event" ? "border-volt/50 bg-volt/10" : "border-line bg-surface"
                 }`}
               >
                 {msg.text}
@@ -109,16 +172,6 @@ export default function PunditFeed() {
               </div>
             </div>
           ))
-        )}
-        {typing && (
-          <div className="flex items-end gap-2.5">
-            <Image src="/assets/mascot-volt.jpg" alt="" width={30} height={30} className="mb-1 rounded-lg" />
-            <div className="flex gap-1 rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3.5">
-              <span className="typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
-              <span className="typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
-              <span className="typing-dot h-1.5 w-1.5 rounded-full bg-muted" />
-            </div>
-          </div>
         )}
         <div ref={endRef} />
       </div>

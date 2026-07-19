@@ -237,6 +237,7 @@ async function buildFeed(): Promise<LiveFeed | null> {
       competition: fx.Competition,
       odds,
       probs,
+      startTime: fx.StartTime,
       updatedAt: Date.now(),
     });
   }

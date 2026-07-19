@@ -117,6 +117,7 @@ function toLiveMatch(f: {
   pHome?: number;
   pDraw?: number;
   pAway?: number;
+  startTime?: number;
   updatedAt: number;
 }) {
   const phase = f.phase === "SCHED" ? "BREAK" : f.phase;
@@ -133,6 +134,7 @@ function toLiveMatch(f: {
         ? { home: f.oddsHome, draw: f.oddsDraw ?? 0, away: f.oddsAway ?? 0 }
         : null,
     probs: f.pHome != null ? { home: f.pHome, draw: f.pDraw ?? 0, away: f.pAway ?? 0 } : null,
+    startTime: f.startTime,
     updatedAt: f.updatedAt,
   };
 }

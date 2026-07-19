@@ -1,40 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
-import { PLATFORM_FEE, POOL_ENTRY_USDC, squadStandings } from "@/lib/engine";
-import { loadPlayer, savePlayer } from "@/lib/game";
 import { useLiveWorld } from "@/lib/useLiveWorld";
 
+// The sim's "Sunday League" sweepstake ranked fabricated member handles
+// against invented picks. There is no real backend for multi-member squads,
+// so rather than fabricate members/points we show the real TxLINE fixtures
+// directly — every team, score, and phase below is live feed data.
 export default function SquadBoard() {
   const world = useLiveWorld();
-  const [handle, setHandle] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-
-  useEffect(() => {
-    setHandle(loadPlayer().handle);
-  }, []);
-
-  const standings = useMemo(
-    () => (world ? squadStandings(world.now, handle ?? undefined) : []),
-    [world, handle],
-  );
-
-  const join = () => {
-    const clean = draft.trim().slice(0, 18);
-    if (!clean) return;
-    const p = loadPlayer();
-    savePlayer({ ...p, handle: clean });
-    setHandle(clean);
-  };
-
-  const members = standings.length || 8;
-  const pool = members * POOL_ENTRY_USDC;
-  const fee = pool * PLATFORM_FEE;
+  const matches = world?.matches ?? [];
 
   return (
     <div>
-      {/* pool header */}
+      {/* header */}
       <div className="relative overflow-hidden rounded-2xl border border-line">
         <Image
           src="/assets/trophy.jpg"
@@ -48,91 +27,65 @@ export default function SquadBoard() {
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-1.5 p-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-2xl font-extrabold tracking-tight">The Sunday League</h1>
-            <p className="font-mono text-xs text-muted">
-              {members} members · 2 nations each · live from the feed
-            </p>
+            <p className="font-mono text-xs text-muted">real fixtures, straight off the feed</p>
           </div>
-          <div className="sm:text-right">
-            <div className="font-mono text-2xl font-semibold">{pool} USDC</div>
-            <div className="font-mono text-[11px] text-muted">
-              prize pool · {fee.toFixed(1)} USDC rake (2%)
+          {world && (
+            <div className="sm:text-right">
+              <div className="font-mono text-2xl font-semibold">{matches.length}</div>
+              <div className="font-mono text-[11px] text-muted">fixtures on the feed</div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* join */}
-      {!handle && (
-        <div className="mt-4 rounded-2xl border border-line bg-surface p-4">
-          <p className="text-sm text-muted">
-            Claim a handle to enter. You get two nations, drawn fair from the hat.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <label htmlFor="handle" className="sr-only">
-              Your handle
-            </label>
-            <input
-              id="handle"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && join()}
-              placeholder="YourHandle"
-              className="min-w-0 flex-1 rounded-xl border border-line bg-night px-4 py-3 font-mono text-sm text-chalk placeholder:text-muted/60 focus:border-volt focus:outline-none"
-            />
-            <button
-              onClick={join}
-              className="rounded-xl bg-volt px-5 py-3 font-bold text-night transition-transform hover:scale-[1.02] active:translate-y-px"
-            >
-              Join the squad
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* standings */}
+      {/* live fixtures */}
       <div className="mt-4 overflow-hidden rounded-2xl border border-line bg-surface">
-        <div className="grid grid-cols-[2rem_1fr_auto_auto] gap-3 border-b border-line px-4 py-2.5 font-mono text-[11px] uppercase tracking-widest text-muted">
-          <span>#</span>
-          <span>Member</span>
-          <span className="text-right">Goals</span>
-          <span className="text-right">Pts</span>
+        <div className="border-b border-line px-4 py-2.5 font-mono text-[11px] uppercase tracking-widest text-muted">
+          Live fixtures
         </div>
         {!world ? (
           <div className="animate-pulse px-4 py-8 text-center font-mono text-sm text-muted">
-            Loading standings...
+            Awaiting the live feed...
+          </div>
+        ) : matches.length === 0 ? (
+          <div className="px-4 py-8 text-center font-mono text-sm text-muted">
+            No fixtures live from the feed right now.
           </div>
         ) : (
-          standings.map((s, i) => (
+          matches.map((m) => (
             <div
-              key={s.handle}
-              className={`grid grid-cols-[2rem_1fr_auto_auto] items-center gap-3 border-b border-line/60 px-4 py-3 last:border-0 ${
-                s.isUser ? "bg-volt/10" : ""
-              }`}
+              key={m.fixtureId}
+              className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-line/60 px-4 py-3 last:border-0"
             >
-              <span
-                className={`font-mono text-sm ${i === 0 ? "text-volt" : "text-muted"}`}
-              >
-                {i + 1}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate font-bold">
-                  {s.handle}
-                  {s.isUser && <span className="ml-2 font-mono text-[11px] text-volt">you</span>}
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="text-lg" aria-hidden>
+                  {m.home.flag}
                 </span>
-                <span className="font-mono text-xs text-muted">
-                  {s.teams.map((t) => `${t.flag} ${t.code}`).join("  ")}
+                <span className="truncate font-bold">{m.home.code}</span>
+              </span>
+              <span className="text-center font-mono text-sm">
+                <span className="font-semibold">
+                  {m.score[0]}–{m.score[1]}
+                </span>
+                <span className="ml-2 text-[10px] uppercase tracking-widest text-muted">
+                  {m.phase === "LIVE" ? `${m.minute}'` : m.phase}
                 </span>
               </span>
-              <span className="text-right font-mono text-sm text-muted">{s.goals}</span>
-              <span className="text-right font-mono text-lg font-semibold">{s.points}</span>
+              <span className="flex min-w-0 items-center justify-end gap-2 text-right">
+                <span className="truncate font-bold">{m.away.code}</span>
+                <span className="text-lg" aria-hidden>
+                  {m.away.flag}
+                </span>
+              </span>
             </div>
           ))
         )}
       </div>
 
       <p className="mt-3 px-1 font-mono text-[11px] leading-relaxed text-muted">
-        Points settle automatically as fixtures finish on the TxLINE feed: 3 for a win, 1 for a
-        draw, plus goal difference as the tiebreak. No spreadsheets, no arguments.
+        Squad sweepstakes (member handles, pooled prize) need real multi-player data this build
+        doesn&apos;t have yet — until then, this board shows the real TxLINE fixtures directly, no
+        invented members or points.
       </p>
     </div>
   );

@@ -21,6 +21,8 @@ export interface LiveMatch {
   competition: string;
   odds: { home: number; draw: number; away: number } | null;
   probs: { home: number; draw: number; away: number } | null;
+  /** Kickoff time (unix ms) — drives day-aware Live/Upcoming/Past bucketing. */
+  startTime?: number;
   updatedAt: number;
 }
 export interface LiveFeed {

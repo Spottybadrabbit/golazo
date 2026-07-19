@@ -10,8 +10,7 @@ import {
   CARDS,
   collectionCount,
   drawFromPool,
-  tomorrowPool,
-  tomorrowSlate,
+  poolFromTeams,
   TIER_ORDER,
   PACK_COST,
   PACK_SIZE,
@@ -19,7 +18,8 @@ import {
   type Tier,
 } from "@/lib/cards";
 import { BADGES, loadPlayer, pushTx, savePlayer, type PlayerState } from "@/lib/game";
-import type { Fixture } from "@/lib/engine";
+import { useLiveFeed } from "@/components/LiveDataProvider";
+import type { LiveMatch } from "@/lib/live-map";
 import { useCelebrate } from "@/components/celebrate/Celebration";
 
 function bestTier(cards: CardDef[]): Tier {
@@ -31,6 +31,7 @@ function bestTier(cards: CardDef[]): Tier {
 
 export default function CardsGame() {
   const celebrate = useCelebrate();
+  const feed = useLiveFeed();
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pulled, setPulled] = useState<CardDef[] | null>(null);
   const [packKey, setPackKey] = useState(0);
@@ -50,11 +51,14 @@ export default function CardsGame() {
   }
 
   const owned = collectionCount(player.cards ?? {});
+  const matches = feed?.matches ?? [];
+  const slate = matches.slice(0, 6);
+  const pool = poolFromTeams(matches.flatMap((m) => [m.home, m.away]));
   const canAfford = player.goalPoints >= PACK_COST;
-  const slate = tomorrowSlate();
+  const canOpen = canAfford && pool.length > 0;
 
   const handleOpen = () => {
-    const pool = tomorrowPool();
+    if (pool.length === 0) return;
     const cards = Array.from({ length: PACK_SIZE }, () => drawFromPool(pool));
     const nextCards = { ...(player.cards ?? {}) };
     for (const c of cards) nextCards[c.id] = (nextCards[c.id] ?? 0) + 1;
@@ -105,16 +109,16 @@ export default function CardsGame() {
       <header className="floodlight relative overflow-hidden rounded-3xl border border-line bg-surface px-5 pb-6 pt-7 text-center">
         <GlossyShelf className="mb-4" />
         <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-volt">
-          Matchday · tomorrow
+          Matchday · live feed
         </p>
         <h1 className="mt-1 text-3xl font-extrabold uppercase tracking-tight sm:text-4xl">
-          Tomorrow&apos;s <span className="text-volt">pack</span>
+          Today&apos;s <span className="text-volt">pack</span>
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-          Only players from tomorrow&apos;s fixtures. Two cards a pack — pull odds by FIFA tier:
-          56% bronze, 32% silver, 12% gold.
+          Only players from nations live on the feed right now. Two cards a pack — pull odds by
+          FIFA tier: 56% bronze, 32% silver, 12% gold.
         </p>
-        <FixtureStrip slate={slate} />
+        <FixtureStrip slate={slate} featuredId={feed?.featured?.fixtureId ?? null} />
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
           <Stat icon="bolt" tint="volt" label="balance" value={`${player.goalPoints} GOAL`} />
           <Stat icon="shield" tint="cyan" label="collection" value={`${owned}/${CARDS.length}`} />
@@ -124,24 +128,32 @@ export default function CardsGame() {
 
       {/* pack opener / reveal */}
       <section className="mt-5 rounded-3xl border border-line bg-gradient-to-b from-raised to-surface p-5 sm:p-7">
-        {!pulled ? (
+        {!pulled && pool.length === 0 ? (
+          <div className="flex flex-col items-center gap-1 py-8 text-center">
+            <p className="font-mono text-sm text-muted">
+              {matches.length === 0
+                ? "No live fixtures on the feed yet. Packs open the moment real matches start streaming."
+                : "None of today's live fixtures have a card yet — check back as more nations kick off."}
+            </p>
+          </div>
+        ) : !pulled ? (
           <div className="flex flex-col items-center">
-            <PackScene key={packKey} onOpen={handleOpen} busy={!canAfford} />
+            <PackScene key={packKey} onOpen={handleOpen} busy={!canOpen} />
             <button
               onClick={() => {
                 if (!canAfford)
                   setNote(`You need ${PACK_COST} GOAL for a pack. Bank a Hi-Lo streak first.`);
               }}
               className={`mt-5 rounded-xl px-6 py-3 font-extrabold uppercase tracking-wide transition-transform ${
-                canAfford
+                canOpen
                   ? "cursor-default bg-volt text-night shadow-[0_0_28px_rgba(175,255,0,0.35)]"
                   : "border border-line bg-surface text-muted"
               }`}
             >
-              {canAfford ? `Tap the pack · ${PACK_COST} GOAL` : `Locked · ${PACK_COST} GOAL`}
+              {canOpen ? `Tap the pack · ${PACK_COST} GOAL` : `Locked · ${PACK_COST} GOAL`}
             </button>
             <p className="mt-2 font-mono text-[11px] uppercase tracking-widest text-muted">
-              {canAfford ? "tap or press enter to rip" : "bank a streak to afford a pack"}
+              {canOpen ? "tap or press enter to rip" : "bank a streak to afford a pack"}
             </p>
           </div>
         ) : (
@@ -242,7 +254,18 @@ export default function CardsGame() {
   );
 }
 
-function FixtureStrip({ slate }: { slate: Fixture[] }) {
+function timeLabel(startTime?: number): string {
+  if (!startTime) return "—";
+  return new Date(startTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function FixtureStrip({
+  slate,
+  featuredId,
+}: {
+  slate: LiveMatch[];
+  featuredId: number | null;
+}) {
   if (!slate.length) return null;
   return (
     <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
@@ -250,18 +273,18 @@ function FixtureStrip({ slate }: { slate: Fixture[] }) {
         <span
           key={f.fixtureId}
           className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] ${
-            f.featured
+            f.fixtureId === featuredId
               ? "border-volt/60 bg-volt/10 text-chalk"
               : "border-line bg-night/50 text-muted"
           }`}
-          title={`${f.home.name} v ${f.away.name} · ${f.time}`}
+          title={`${f.home.name} v ${f.away.name}`}
         >
           <span aria-hidden>{f.home.flag}</span>
           <span className="font-semibold text-chalk">{f.home.code}</span>
           <span className="opacity-50">v</span>
           <span className="font-semibold text-chalk">{f.away.code}</span>
           <span aria-hidden>{f.away.flag}</span>
-          <span className="ml-0.5 opacity-60">{f.time}</span>
+          <span className="ml-0.5 opacity-60">{timeLabel(f.startTime)}</span>
         </span>
       ))}
     </div>

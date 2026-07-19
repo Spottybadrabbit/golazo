@@ -1,33 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  currentRound,
-  liveWorld,
-  type HiLoRound,
-  type LiveWorld,
-} from "@/lib/engine";
+import { currentRound, type HiLoRound, type LiveWorld } from "@/lib/engine";
 import { buildLiveWorld, liveIsFresh } from "@/lib/live-map";
 import { useLiveFeed } from "@/components/LiveDataProvider";
 
 /**
- * Client heartbeat. Prefers the reactive Convex live feed (real TxODDS data)
- * when it is present and fresh; otherwise recomputes the deterministic
- * simulator every second so the UI still moves. Returns null until mounted
- * (server markup stays time-independent, avoiding hydration drift).
+ * Client heartbeat — LIVE ONLY. Builds the world from the reactive Convex feed
+ * (real TxODDS data) when present and fresh. There is no simulator fallback:
+ * when no live data is flowing we return null so consumers render an honest
+ * "awaiting the feed" state rather than fabricated numbers. The 1s tick keeps
+ * freshness re-checked and the clock moving between reactive pushes.
  */
 export function useLiveWorld(): LiveWorld | null {
   const feed = useLiveFeed();
-  const [sim, setSim] = useState<LiveWorld | null>(null);
+  const [, setTick] = useState(0);
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    const update = () => setSim(liveWorld());
-    update();
-    const id = setInterval(update, 1000);
+    setMounted(true);
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
   }, []);
 
-  if (liveIsFresh(feed, Date.now())) return buildLiveWorld(feed, Date.now());
-  return sim;
+  if (!mounted) return null; // avoid hydration drift (time-dependent)
+  const now = Date.now();
+  if (liveIsFresh(feed, now)) return buildLiveWorld(feed, now);
+  return null;
 }
 
 export interface RoundClock {
