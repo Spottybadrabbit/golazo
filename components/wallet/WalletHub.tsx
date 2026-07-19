@@ -559,21 +559,68 @@ function Settings({
         </Link>
       </section>
 
-      <section className="rounded-2xl border border-down/30 bg-down/5 p-5">
-        <h3 className="font-mono text-[11px] uppercase tracking-widest text-down">Danger zone</h3>
-        <p className="mt-2 text-sm text-muted">
-          Reset the demo — clears balances, cards, streaks, and history.
-        </p>
+      {realWallet && <DangerZone update={update} />}
+    </div>
+  );
+}
+
+/** Signed-in-only: permanently deletes the player's own Clerk account. Only
+ * mounted when `realWallet` (clerkOn) is true, so `useUser()` always has a
+ * `ClerkProvider` ancestor — same gating pattern as `RealPanel` above. */
+function DangerZone({ update }: { update: (p: PlayerState) => void }) {
+  const { isSignedIn, user } = useUser();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isSignedIn) return null;
+
+  const handleDelete = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await user?.delete();
+      update(resetDemo());
+    } catch {
+      setError("Couldn’t delete your account. Please try again.");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-down/30 bg-down/5 p-5">
+      <h3 className="font-mono text-[11px] uppercase tracking-widest text-down">Danger zone</h3>
+      <p className="mt-2 text-sm text-muted">
+        Permanently delete your account and all your data. This cannot be undone.
+      </p>
+      {error && <p className="mt-2 text-sm text-down">{error}</p>}
+      {confirming ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-chalk">Are you sure?</span>
+          <button
+            onClick={handleDelete}
+            disabled={busy}
+            className="rounded-xl bg-down px-4 py-2 text-sm font-bold text-night transition-colors hover:bg-down/80 disabled:opacity-60"
+          >
+            {busy ? "Deleting…" : "Delete"}
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            disabled={busy}
+            className="rounded-xl border border-line bg-surface px-4 py-2 text-sm font-semibold text-chalk transition-colors hover:text-volt"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
         <button
-          onClick={() => {
-            if (confirm("Reset all demo progress? This can’t be undone.")) update(resetDemo());
-          }}
+          onClick={() => setConfirming(true)}
           className="mt-3 rounded-xl border border-down/50 bg-down/10 px-5 py-2.5 text-sm font-bold text-down transition-colors hover:bg-down/20"
         >
-          Reset demo
+          Delete account
         </button>
-      </section>
-    </div>
+      )}
+    </section>
   );
 }
 

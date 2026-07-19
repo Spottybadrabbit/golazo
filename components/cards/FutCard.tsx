@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { TIER_LABEL, statRows, type CardDef } from "@/lib/cards";
+import { statRows, type CardDef } from "@/lib/cards";
 
 // A procedural FUT-style player card, rendered entirely from tokens — no photo
 // asset required, so it stays razor-sharp at any size. The FIFA Ultimate Team
@@ -151,12 +151,7 @@ export default function FutCard({ card, size = "lg", interactive = true, classNa
                 border: `1px solid ${t.lo}`,
               }}
             >
-              <span
-                className="font-extrabold uppercase leading-none"
-                style={{ fontSize: "clamp(1rem,15cqw,3rem)", color: t.ink }}
-              >
-                {card.code[0]}
-              </span>
+              <PlayerSilhouette color={t.ink} />
               <span
                 className="absolute bottom-[8%] font-mono font-bold uppercase leading-none"
                 style={{ fontSize: "clamp(.4rem,4cqw,.7rem)", color: t.sub }}
@@ -222,19 +217,29 @@ export default function FutCard({ card, size = "lg", interactive = true, classNa
             </span>
           </div>
         </div>
-
-        {/* rarity ribbon */}
-        <span
-          className="absolute right-0 top-[16%] rounded-l-full px-[6%] py-[1.5%] font-mono font-bold uppercase tracking-widest"
-          style={{
-            fontSize: "clamp(.4rem,3cqw,.65rem)",
-            background: t.ink,
-            color: t.accent,
-          }}
-        >
-          {TIER_LABEL[card.tier]}
-        </span>
       </div>
     </div>
+  );
+}
+
+/** Stylized footballer silhouette — the "player image" slot. No real-player
+ * likeness is used; the tier color alone signals rarity (bust + ball reads
+ * clearly even at the small `size="sm"` collection-grid scale). */
+function PlayerSilhouette({ color }: { color: string }) {
+  return (
+    <svg
+      viewBox="0 0 100 100"
+      fill={color}
+      className="h-[64%] w-[64%]"
+      style={{ filter: "drop-shadow(0 1px 1px rgba(255,255,255,0.35))" }}
+      aria-hidden
+    >
+      {/* head */}
+      <circle cx="50" cy="26" r="14" />
+      {/* shoulders / torso bust */}
+      <path d="M50 44c-16 0-27 10-27 26v4h54v-4c0-16-11-26-27-26z" />
+      {/* ball at the feet, kept clear of the torso so it reads as a ball */}
+      <circle cx="50" cy="88" r="9" />
+    </svg>
   );
 }

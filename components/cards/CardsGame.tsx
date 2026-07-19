@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Confetti from "@/components/Confetti";
 import FutCard from "@/components/cards/FutCard";
 import PackScene from "@/components/cards/PackScene";
@@ -185,8 +185,11 @@ export default function CardsGame() {
               {pulled.map((c, i) => (
                 <div
                   key={`${c.id}-${i}`}
-                  className="walkout"
-                  style={{ animationDelay: `${0.15 + i * 0.35}s` }}
+                  className="pack-pop"
+                  style={{
+                    animationDelay: `${0.15 + i * 0.35}s`,
+                    "--pop-rot": i % 2 === 0 ? "-10deg" : "10deg",
+                  } as CSSProperties}
                 >
                   <FutCard card={c} size="lg" />
                 </div>

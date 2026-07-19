@@ -8,14 +8,16 @@
 
 export type Tier = "bronze" | "silver" | "gold";
 
-/** The six FUT-style attributes, in display order (PAC SHO PAS DRI DEF PHY). */
+/** Football performance attributes shown on the card, in display order
+ * (GOALS ASSISTS TACKLES PASSES RUNS SHOTS). Collectible-card style values,
+ * not live match stats. */
 export interface CardStats {
-  pac: number;
-  sho: number;
-  pas: number;
-  dri: number;
-  def: number;
-  phy: number;
+  goals: number;
+  assists: number;
+  tackles: number;
+  passes: number;
+  runs: number;
+  shots: number;
 }
 
 export interface CardDef {
@@ -66,19 +68,19 @@ const clamp = (n: number) => Math.max(32, Math.min(99, Math.round(n)));
 function mkStats(r: number, pos: string): CardStats {
   const arch = ARCH_FOR[pos] ?? "mid";
   const t: Record<Arch, CardStats> = {
-    fwd: { pac: r + 3, sho: r + 2, pas: r - 7, dri: r + 1, def: r - 42, phy: r - 6 },
-    wing: { pac: r + 6, sho: r - 3, pas: r - 3, dri: r + 4, def: r - 40, phy: r - 12 },
-    mid: { pac: r - 5, sho: r - 4, pas: r + 5, dri: r + 3, def: r - 8, phy: r - 2 },
-    def: { pac: r - 7, sho: r - 32, pas: r - 8, dri: r - 12, def: r + 5, phy: r + 4 },
+    fwd: { goals: r + 4, assists: r - 6, tackles: r - 40, passes: r - 8, runs: r + 2, shots: r + 5 },
+    wing: { goals: r - 2, assists: r + 3, tackles: r - 38, passes: r - 4, runs: r + 6, shots: r - 1 },
+    mid: { goals: r - 10, assists: r + 4, tackles: r - 6, passes: r + 5, runs: r + 1, shots: r - 8 },
+    def: { goals: r - 30, assists: r - 15, tackles: r + 5, passes: r - 6, runs: r - 8, shots: r - 34 },
   };
   const s = t[arch];
   return {
-    pac: clamp(s.pac),
-    sho: clamp(s.sho),
-    pas: clamp(s.pas),
-    dri: clamp(s.dri),
-    def: clamp(s.def),
-    phy: clamp(s.phy),
+    goals: clamp(s.goals),
+    assists: clamp(s.assists),
+    tackles: clamp(s.tackles),
+    passes: clamp(s.passes),
+    runs: clamp(s.runs),
+    shots: clamp(s.shots),
   };
 }
 
@@ -146,15 +148,15 @@ export const PACK_SIZE = 2;
 /** Pull odds by tier — bronze common, gold rare, like a real pack. */
 const TIER_WEIGHT: Record<Tier, number> = { bronze: 0.56, silver: 0.32, gold: 0.12 };
 
-/** Stat rows as [label, value] pairs in the canonical FUT two-column order. */
+/** Stat rows as [label, value] pairs in the card's two-column grid order. */
 export function statRows(s: CardStats): [string, number][] {
   return [
-    ["PAC", s.pac],
-    ["SHO", s.sho],
-    ["PAS", s.pas],
-    ["DRI", s.dri],
-    ["DEF", s.def],
-    ["PHY", s.phy],
+    ["GLS", s.goals],
+    ["AST", s.assists],
+    ["TCK", s.tackles],
+    ["PAS", s.passes],
+    ["RUN", s.runs],
+    ["SHT", s.shots],
   ];
 }
 

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Outfit, IBM_Plex_Mono } from "next/font/google";
+import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
@@ -7,19 +7,20 @@ import LiveDataProvider from "@/components/LiveDataProvider";
 import PlayerSync from "@/components/PlayerSync";
 import CelebrationProvider from "@/components/celebrate/Celebration";
 import OnboardingGate from "@/components/onboarding/OnboardingGate";
+import GoloSplash from "@/components/GoloSplash";
 import "./globals.css";
 
 const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
-const outfit = Outfit({
+const outfit = Space_Grotesk({
   variable: "--font-outfit",
   subsets: ["latin"],
 });
 
-const plexMono = IBM_Plex_Mono({
+const plexMono = JetBrains_Mono({
   variable: "--font-plex-mono",
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
 });
 
 const siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
@@ -53,6 +54,7 @@ export default function RootLayout({
   const body = (
     <html lang="en">
       <body className={`${outfit.variable} ${plexMono.variable} antialiased`}>
+        <GoloSplash />
         <ConvexClientProvider>
           <LiveDataProvider>
             <PlayerSync>
