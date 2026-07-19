@@ -2,16 +2,29 @@
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import Confetti from "@/components/Confetti";
 import { loadPlayer, savePlayer } from "@/lib/game";
 
-// Duolingo-style gamified first-visit onboarding for GOLAZO, skinned in the
-// volt design system. One decision per screen: welcome -> streak goal ->
-// handle -> celebratory finish. Gated on a standalone `golazo.onboarded` key
-// so game.ts stays untouched; only `handle` is written on completion.
+// Duolingo-style gamified onboarding for GOLAZO, skinned in the volt design
+// system. One decision per screen: welcome -> streak goal -> handle ->
+// celebratory finish. It is presented ONLY after the user authenticates with
+// Clerk (their Solana wallet account), and only once per account/browser —
+// gated on a standalone `golazo.onboarded` key so game.ts stays untouched;
+// only `handle` is written on completion.
 
 const ONBOARDED_KEY = "golazo.onboarded";
 const TOTAL_STEPS = 4;
+const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+
+// Onboarding only exists behind authentication. With no auth provider there is
+// nothing to gate on, so we render nothing rather than showing it to anonymous
+// visitors. This wrapper also keeps `useUser()` from running without a
+// <ClerkProvider> above it.
+export default function OnboardingGate() {
+  if (!clerkEnabled) return null;
+  return <OnboardingFlow />;
+}
 
 interface Goal {
   id: string;
@@ -27,7 +40,8 @@ const GOALS: Goal[] = [
   { id: "committed", name: "Committed", streak: 7, bonus: 300, tag: "7-day streak" },
 ];
 
-export default function OnboardingGate() {
+function OnboardingFlow() {
+  const { isSignedIn, isLoaded } = useUser();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -35,15 +49,24 @@ export default function OnboardingGate() {
   const [handle, setHandle] = useState("");
   const [burst, setBurst] = useState(0);
 
-  // SSR-safe first-visit check: never read localStorage/window until mounted.
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // Present onboarding only once the user is authenticated (Clerk / Solana
+  // wallet) and has not completed it before. SSR-safe: localStorage is only
+  // read inside this client effect.
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) {
+      setOpen(false);
+      return;
+    }
     try {
       if (window.localStorage.getItem(ONBOARDED_KEY) !== "1") setOpen(true);
     } catch {
       setOpen(true);
     }
-  }, []);
+  }, [isLoaded, isSignedIn]);
 
   // Lock page scroll behind the full-screen overlay while it's open.
   useEffect(() => {
