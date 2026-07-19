@@ -1,36 +1,28 @@
 import { NextResponse } from "next/server";
-import { currentRound } from "@/lib/engine";
-import { getFeed } from "@/lib/feed/adapter";
+import { currentRound, liveWorld } from "@/lib/engine";
+import { fetchLiveMarquee, liveConfigured } from "@/lib/txline.server";
 
-// Server truth endpoint. The feed adapter (lib/feed/adapter) decides whether
-// this world comes from the deterministic simulator or the real TxODDS TxLINE
-// devnet feed, keyed on TXLINE_MODE=live. The ENG v FRA marquee (engine.ts) and
-// the Hi-Lo round timing stay simulator-driven either way; only the underlying
-// MatchState data source swaps. See lib/feed/* for the adapter layer.
-export const dynamic = "force-dynamic";
-
+// Server truth endpoint: the same deterministic engine the client runs,
+// exposed as JSON. When a TxLINE token is configured (TXLINE_MODE=live), the
+// featured England v France marquee is replaced with the real TxODDS feed;
+// everything else stays on the simulated engine. See lib/txline.server.ts.
 export async function GET() {
-  const feed = getFeed();
-  const headers = { "Cache-Control": "no-store" };
+  const world = liveWorld();
+  let mode: "sim" | "live" = "sim";
+  let matches = world.matches;
 
-  if (feed.mode === "live" && !feed.ready) {
-    // Live requested but the TxLINE pipeline isn't serving yet: say so honestly
-    // (503 + reason) rather than faking it. The client keeps polling.
-    return NextResponse.json(
-      { mode: feed.mode, ready: false, detail: feed.detail },
-      { status: 503, headers },
-    );
+  if (liveConfigured()) {
+    const live = await fetchLiveMarquee();
+    if (live) {
+      mode = "live";
+      matches = [live, ...world.matches.slice(1)];
+    }
   }
 
-  const world = await feed.getWorld();
   return NextResponse.json(
     {
-      mode: feed.mode,
-      ready: true,
-      source:
-        feed.mode === "live"
-          ? "TxODDS TxLINE World Cup feed"
-          : "deterministic simulation",
+      mode,
+      source: mode === "live" ? "TxODDS TxLINE World Cup feed" : "deterministic simulation",
       now: world.now,
       nextTickAt: world.nextTickAt,
       marquee: "ENG v FRA",
