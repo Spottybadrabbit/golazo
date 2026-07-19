@@ -9,6 +9,7 @@
  */
 
 import type * as activity from "../activity.js";
+import type * as apikeys from "../apikeys.js";
 import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as game from "../game.js";
@@ -28,6 +29,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   activity: typeof activity;
+  apikeys: typeof apikeys;
   crons: typeof crons;
   feed: typeof feed;
   game: typeof game;

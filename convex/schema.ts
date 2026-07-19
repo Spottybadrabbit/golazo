@@ -254,4 +254,16 @@ export default defineSchema({
     featuredFixtureId: v.optional(v.number()),
     note: v.optional(v.string()),
   }).index("by_key", ["key"]),
+
+  // ── Developer API keys (issued from /technicaldoc, Clerk-gated) ───────
+  apiKeys: defineTable({
+    clerkId: v.string(),
+    key: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revoked: v.boolean(),
+  })
+    .index("by_clerk", ["clerkId"])
+    .index("by_key", ["key"]),
 });
