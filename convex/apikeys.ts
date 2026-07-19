@@ -76,3 +76,34 @@ export const revokeKey = mutation({
     return { ok: true };
   },
 });
+
+/**
+ * Validate an API key — PUBLIC, called server-side by the protected API route
+ * (`/api/v1/feed`). Returns the owner + label when the key exists and is not
+ * revoked; `{ valid: false }` otherwise. Does not require Clerk auth (the key
+ * itself is the credential).
+ */
+export const validateKey = query({
+  args: { key: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique();
+    if (!row || row.revoked) return { valid: false as const };
+    return { valid: true as const, clerkId: row.clerkId, label: row.label };
+  },
+});
+
+/** Best-effort "last used" stamp, called after a successful authed request. */
+export const touchKey = mutation({
+  args: { key: v.string() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("apiKeys")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique();
+    if (row && !row.revoked) await ctx.db.patch(row._id, { lastUsedAt: Date.now() });
+    return null;
+  },
+});
