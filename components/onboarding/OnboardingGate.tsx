@@ -96,7 +96,7 @@ export default function OnboardingGate() {
       role="dialog"
       aria-modal="true"
       aria-label="Welcome to GOLAZO"
-      className="floodlight fixed inset-0 z-[110] overflow-y-auto bg-night text-chalk"
+      className="fixed inset-0 z-[110] overflow-y-auto bg-night text-chalk"
     >
       <div className="mx-auto flex min-h-full max-w-md flex-col px-6 pb-8 pt-6">
         {/* header: back arrow · progress bar · skip */}
