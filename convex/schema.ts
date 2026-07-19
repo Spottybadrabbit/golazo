@@ -228,86 +228,34 @@ export default defineSchema({
     sequence: v.optional(v.number()),
     solanaTx: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_clerk", ["clerkId"]),
-
-  // ── Live TxODDS feed (written by the poller, read by the app) ─────────
-  liveFixtures: defineTable({
-    fixtureId: v.number(),
-    homeCode: v.string(),
-    homeName: v.string(),
-    homeFlag: v.string(),
-    awayCode: v.string(),
-    awayName: v.string(),
-    awayFlag: v.string(),
-    homeGoals: v.number(),
-    awayGoals: v.number(),
-    minute: v.optional(v.number()),
-    statusId: v.optional(v.number()),
-    phase: v.string(),
-    inPlay: v.boolean(),
-    competition: v.string(),
-    // pre-match / live 1X2 (nullable until odds exist)
-    oddsHome: v.optional(v.number()),
-    oddsDraw: v.optional(v.number()),
-    oddsAway: v.optional(v.number()),
-    pHome: v.optional(v.number()),
-    pDraw: v.optional(v.number()),
-    pAway: v.optional(v.number()),
-    startTime: v.optional(v.number()),
-    updatedAt: v.number(),
-  })
-    .index("by_fixture", ["fixtureId"])
-    .index("by_updated", ["updatedAt"]),
-
-  liveTicks: defineTable({
-    fixtureId: v.number(),
-    ts: v.number(),
-    oddsHome: v.number(),
-    oddsDraw: v.number(),
-    oddsAway: v.number(),
-    pHome: v.number(),
-    pDraw: v.number(),
-    pAway: v.number(),
-  }).index("by_fixture_ts", ["fixtureId", "ts"]),
-
-  pollState: defineTable({
-    key: v.string(),
-    mode: v.string(),
-    lastPollAt: v.number(),
-    featuredFixtureId: v.optional(v.number()),
-    note: v.optional(v.string()),
-    // Single-loop lease: only the poll loop whose id matches keeps running, so
-    // stray/duplicate loops (from redeploys or manual triggers) self-terminate.
-    loopId: v.optional(v.string()),
-  }).index("by_key", ["key"]),
-
-  // ── Merkle roots ("Miracle Tree"): tamper-evident commitment over the ──
-  // ── real live odds-tick history, recomputed on a cron ──────────────────
-  merkleRoots: defineTable({
-    fixtureId: v.number(),
-    root: v.string(),
-    leafCount: v.number(),
-    fromTs: v.number(),
-    toTs: v.number(),
-    algo: v.string(),
-    computedAt: v.number(),
-  })
-    .index("by_fixture", ["fixtureId"])
-    .index("by_computed", ["computedAt"]),
-
-  // ── Developer API keys (issued from /technicaldoc, Clerk-gated) ───────
-  apiKeys: defineTable({
-    clerkId: v.string(),
-    key: v.string(),
-    label: v.string(),
-    createdAt: v.number(),
-    lastUsedAt: v.optional(v.number()),
-    revoked: v.boolean(),
   })
     .index("by_clerk", ["clerkId"])
-    .index("by_key", ["key"]),
+    // Used by notify.usersInterestedIn to find who bet on / joined a fixture.
+    .index("by_fixture", ["fixtureId"]),
 
-  // ════════════════════════════════════════════════════════════════════
+  // Telegram chat linked to a Clerk user, so the cron notifier can reach them.
+  telegramLinks: defineTable({
+    clerkId: v.string(),
+    chatId: v.string(),
+    linkedAt: v.number(),
+  })
+    .index("by_clerk", ["clerkId"])
+    .index("by_chat", ["chatId"]),
+
+  // One-time codes minted in-app ("Connect Telegram") and redeemed by the bot
+  // webhook via `/start <code>`. Expire after 30 minutes (see notify.ts).
+  telegramLinkCodes: defineTable({
+    code: v.string(),
+    clerkId: v.string(),
+    createdAt: v.number(),
+  }).index("by_code", ["code"]),
+
+  // Dedup ledger so each match event notifies a given user at most once.
+  notified: defineTable({
+    clerkId: v.string(),
+    key: v.string(),
+    sentAt: v.number(),
+  }).index("by_clerk_key", ["clerkId", "key"]),
   // TOUCHLINE — autonomous sports-trading-intelligence audit trail.
   //
   // A separate product living in the same deployment as the Golazo fan app.
@@ -442,4 +390,81 @@ export default defineSchema({
     lastEventSeq: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
+
+
+
+  // ── Restored from main (merge gap): tables the merged merkle/apikeys/feed
+  //    functions require. Additive. ──
+  liveFixtures: defineTable({
+    fixtureId: v.number(),
+    homeCode: v.string(),
+    homeName: v.string(),
+    homeFlag: v.string(),
+    awayCode: v.string(),
+    awayName: v.string(),
+    awayFlag: v.string(),
+    homeGoals: v.number(),
+    awayGoals: v.number(),
+    minute: v.optional(v.number()),
+    statusId: v.optional(v.number()),
+    phase: v.string(),
+    inPlay: v.boolean(),
+    competition: v.string(),
+    // pre-match / live 1X2 (nullable until odds exist)
+    oddsHome: v.optional(v.number()),
+    oddsDraw: v.optional(v.number()),
+    oddsAway: v.optional(v.number()),
+    pHome: v.optional(v.number()),
+    pDraw: v.optional(v.number()),
+    pAway: v.optional(v.number()),
+    startTime: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_updated", ["updatedAt"]),
+
+  liveTicks: defineTable({
+    fixtureId: v.number(),
+    ts: v.number(),
+    oddsHome: v.number(),
+    oddsDraw: v.number(),
+    oddsAway: v.number(),
+    pHome: v.number(),
+    pDraw: v.number(),
+    pAway: v.number(),
+  }).index("by_fixture_ts", ["fixtureId", "ts"]),
+
+  pollState: defineTable({
+    key: v.string(),
+    mode: v.string(),
+    lastPollAt: v.number(),
+    featuredFixtureId: v.optional(v.number()),
+    note: v.optional(v.string()),
+    // Single-loop lease: only the poll loop whose id matches keeps running, so
+    // stray/duplicate loops (from redeploys or manual triggers) self-terminate.
+    loopId: v.optional(v.string()),
+  }).index("by_key", ["key"]),
+
+  merkleRoots: defineTable({
+    fixtureId: v.number(),
+    root: v.string(),
+    leafCount: v.number(),
+    fromTs: v.number(),
+    toTs: v.number(),
+    algo: v.string(),
+    computedAt: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_computed", ["computedAt"]),
+
+  apiKeys: defineTable({
+    clerkId: v.string(),
+    key: v.string(),
+    label: v.string(),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revoked: v.boolean(),
+  })
+    .index("by_clerk", ["clerkId"])
+    .index("by_key", ["key"]),
 });

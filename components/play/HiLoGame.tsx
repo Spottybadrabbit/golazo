@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Confetti from "@/components/Confetti";
 import {
@@ -14,6 +15,7 @@ import {
   savePlayer,
   type PlayerState,
 } from "@/lib/game";
+import { matchSlug } from "@/lib/match";
 import { useLiveWorld, useRoundClock } from "@/lib/useLiveWorld";
 import { useCelebrate } from "@/components/celebrate/Celebration";
 import { usePersist } from "@/components/PlayerSync";
@@ -77,9 +79,9 @@ function callTitle(streak: number): string {
 
 export default function HiLoGame() {
   const world = useLiveWorld();
-  const clock = useRoundClock();
-  const celebrate = useCelebrate();
+  const clock = useRoundClock(world?.round ?? null);
   const { recordGamePlay, logActivity } = usePersist();
+  const celebrate = useCelebrate();
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pick, setPick] = useState<Pick | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -293,7 +295,12 @@ export default function HiLoGame() {
             <span className="live-dot inline-block h-2 w-2 rounded-full bg-volt" />
             {m.phase === "LIVE" ? `LIVE ${m.minute}'` : m.phase}
           </span>
-          <span>fixture {m.fixtureId}</span>
+          <Link
+            href={`/match/${matchSlug(m)}`}
+            className="underline-offset-4 hover:text-chalk hover:underline"
+          >
+            fixture {m.fixtureId}
+          </Link>
         </div>
         <div className="mt-3 flex items-center justify-between">
           <TeamBlock flag={m.home.flag} code={m.home.code} />
