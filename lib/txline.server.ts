@@ -251,6 +251,9 @@ async function buildFeed(): Promise<LiveFeed | null> {
   const featured =
     withOdds.find((m) => isWC(m) && inPlay(m)) ??
     withOdds.find((m) => isWC(m)) ??
+    // A World Cup match stays the marquee even if its odds are momentarily
+    // absent this fetch — never drift to a no-odds friendly.
+    matches.find((m) => isWC(m)) ??
     withOdds.find((m) => inPlay(m)) ??
     withOdds[0] ??
     matches[0] ??

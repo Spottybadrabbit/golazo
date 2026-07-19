@@ -165,6 +165,8 @@ export const live = query({
     const featured =
       matches.find((m) => isWorldCup(m.competition) && m.odds && inPlay(m)) ??
       matches.find((m) => isWorldCup(m.competition) && m.odds) ??
+      // A World Cup match stays the marquee even if odds momentarily drop.
+      matches.find((m) => isWorldCup(m.competition)) ??
       matches.find((m) => m.fixtureId === state?.featuredFixtureId && (m.odds || inPlay(m))) ??
       matches.find((m) => m.odds && inPlay(m)) ??
       matches.find((m) => m.odds) ??
