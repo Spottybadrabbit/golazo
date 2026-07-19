@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { SignInButton, useClerk, useUser } from "@clerk/nextjs";
 import GlossyIcon from "@/components/icons/GlossyIcons";
 import {
   connectWallet,
   disconnectWallet,
   formatSol,
   loadPlayer,
+  pushTx,
   resetDemo,
   savePlayer,
   shortAddress,
   type PlayerState,
   type Tx,
 } from "@/lib/game";
+
+const clerkOn = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
 type Tab = "overview" | "history" | "settings";
 
@@ -25,7 +29,6 @@ const TABS: { id: Tab; label: string }[] = [
 export default function WalletHub() {
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setPlayer(loadPlayer());
@@ -44,78 +47,13 @@ export default function WalletHub() {
     );
   }
 
-  const connected = Boolean(player.wallet);
-
-  const copy = async () => {
-    if (!player.wallet) return;
-    try {
-      await navigator.clipboard.writeText(player.wallet);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
-    } catch {
-      /* clipboard blocked — no-op */
-    }
-  };
-
   return (
     <div className="relative">
-      {/* header */}
-      <header className="floodlight relative overflow-hidden rounded-3xl border border-line bg-surface p-6">
-        <div className="flex items-center gap-3">
-          <GlossyIcon name="bolt" tint="volt" size={40} />
-          <div>
-            <h1 className="text-2xl font-extrabold uppercase tracking-tight">Wallet</h1>
-            <p className="font-mono text-[11px] uppercase tracking-widest text-muted">
-              {connected ? "Solana · connected" : "Solana · not connected"}
-            </p>
-          </div>
-        </div>
-
-        {connected ? (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <BalanceCard
-              label="SOL balance"
-              value={formatSol(player.sol)}
-              tint="cyan"
-              icon="star"
-            />
-            <BalanceCard
-              label="GOAL points"
-              value={`${player.goalPoints}`}
-              tint="volt"
-              icon="bolt"
-            />
-            <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-night/50 px-4 py-3">
-              <button
-                onClick={copy}
-                className="font-mono text-sm text-chalk transition-colors hover:text-volt"
-                title="Copy address"
-              >
-                {shortAddress(player.wallet!)} {copied ? "· copied ✓" : "· copy"}
-              </button>
-              <button
-                onClick={() => update(disconnectWallet(player))}
-                className="rounded-full border border-line bg-surface px-4 py-1.5 text-xs font-semibold text-chalk transition-colors hover:border-down/60 hover:text-down"
-              >
-                Log out
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-5 rounded-2xl border border-dashed border-line bg-night/40 p-6 text-center">
-            <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted">
-              Connect a Solana wallet to hold your SOL float, enter money pools, and mint your
-              pulled cards. Simulated for the demo — no real signing.
-            </p>
-            <button
-              onClick={() => update(connectWallet(player))}
-              className="mt-4 rounded-xl bg-volt px-6 py-3 font-extrabold uppercase tracking-wide text-night shadow-[0_0_28px_rgba(175,255,0,0.35)] transition-transform hover:scale-[1.03] active:translate-y-px"
-            >
-              Connect wallet
-            </button>
-          </div>
-        )}
-      </header>
+      {clerkOn ? (
+        <RealPanel player={player} update={update} />
+      ) : (
+        <DemoPanel player={player} update={update} />
+      )}
 
       {/* tabs */}
       <div className="mt-5 flex gap-1 rounded-full border border-line bg-surface p-1">
@@ -136,9 +74,196 @@ export default function WalletHub() {
       <div className="mt-5">
         {tab === "overview" && <Overview player={player} />}
         {tab === "history" && <History player={player} />}
-        {tab === "settings" && <Settings player={player} update={update} />}
+        {tab === "settings" && <Settings player={player} update={update} realWallet={clerkOn} />}
       </div>
     </div>
+  );
+}
+
+function HeaderShell({
+  status,
+  children,
+}: {
+  status: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <header className="floodlight relative overflow-hidden rounded-3xl border border-line bg-surface p-6">
+      <div className="flex items-center gap-3">
+        <GlossyIcon name="bolt" tint="volt" size={40} />
+        <div>
+          <h1 className="text-2xl font-extrabold uppercase tracking-tight">Wallet</h1>
+          <p className="font-mono text-[11px] uppercase tracking-widest text-muted">{status}</p>
+        </div>
+      </div>
+      {children}
+    </header>
+  );
+}
+
+function BalanceGrid({
+  sol,
+  goal,
+  address,
+  onLogout,
+  copy,
+  copied,
+}: {
+  sol: string;
+  goal: number;
+  address: string;
+  onLogout: () => void;
+  copy: () => void;
+  copied: boolean;
+}) {
+  return (
+    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <BalanceCard label="SOL balance" value={sol} tint="cyan" icon="star" />
+      <BalanceCard label="GOAL points" value={`${goal}`} tint="volt" icon="bolt" />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-night/50 px-4 py-3 sm:col-span-2">
+        <button
+          onClick={copy}
+          className="font-mono text-sm text-chalk transition-colors hover:text-volt"
+          title="Copy address"
+        >
+          {shortAddress(address)} {copied ? "· copied ✓" : "· copy"}
+        </button>
+        <button
+          onClick={onLogout}
+          className="rounded-full border border-line bg-surface px-4 py-1.5 text-xs font-semibold text-chalk transition-colors hover:border-down/60 hover:text-down"
+        >
+          Log out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function useCopy(address: string | null) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+  return { copy, copied };
+}
+
+/** Real wallet via Clerk's Solana sign-in + live on-chain balance. */
+function RealPanel({ player, update }: { player: PlayerState; update: (p: PlayerState) => void }) {
+  const { isLoaded, user } = useUser();
+  const { signOut } = useClerk();
+  const address = user?.web3Wallets?.[0]?.web3Wallet ?? null;
+  const { copy, copied } = useCopy(address);
+  const [balErr, setBalErr] = useState(false);
+
+  // Sync the real address in and pull the true on-chain SOL balance.
+  useEffect(() => {
+    if (!address) return;
+    let alive = true;
+    const base = loadPlayer();
+    if (base.wallet !== address) {
+      update(pushTx({ ...base, wallet: address }, { kind: "connect", label: "Wallet connected" }));
+    }
+    fetch(`/api/wallet/balance?address=${encodeURIComponent(address)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("balance"))))
+      .then((d: { sol?: number }) => {
+        if (!alive) return;
+        if (typeof d.sol === "number") update({ ...loadPlayer(), wallet: address, sol: d.sol });
+        else setBalErr(true);
+      })
+      .catch(() => alive && setBalErr(true));
+    return () => {
+      alive = false;
+    };
+    // address is the only trigger; update/player intentionally excluded
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
+
+  if (!isLoaded) {
+    return <HeaderShell status="Solana · connecting…">{null}</HeaderShell>;
+  }
+
+  if (address) {
+    return (
+      <HeaderShell status="Solana · connected (live)">
+        <BalanceGrid
+          sol={balErr ? "— SOL" : formatSol(player.sol)}
+          goal={player.goalPoints}
+          address={address}
+          onLogout={() => {
+            update(disconnectWallet(loadPlayer()));
+            void signOut();
+          }}
+          copy={copy}
+          copied={copied}
+        />
+        {balErr && (
+          <p className="mt-2 font-mono text-[11px] text-down">
+            Couldn’t reach the Solana RPC for a live balance.
+          </p>
+        )}
+      </HeaderShell>
+    );
+  }
+
+  return (
+    <HeaderShell status="Solana · not connected">
+      <div className="mt-5 rounded-2xl border border-dashed border-line bg-night/40 p-6 text-center">
+        <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted">
+          Sign in with your Solana wallet to hold your SOL, enter money pools, and mint your pulled
+          cards. Your real on-chain balance shows once connected.
+        </p>
+        <SignInButton mode="modal">
+          <button className="mt-4 rounded-xl bg-volt px-6 py-3 font-extrabold uppercase tracking-wide text-night shadow-[0_0_28px_rgba(175,255,0,0.35)] transition-transform hover:scale-[1.03] active:translate-y-px">
+            Connect wallet
+          </button>
+        </SignInButton>
+      </div>
+    </HeaderShell>
+  );
+}
+
+/** Fallback wallet (no Clerk keys): simulated connect for local/demo runs. */
+function DemoPanel({ player, update }: { player: PlayerState; update: (p: PlayerState) => void }) {
+  const { copy, copied } = useCopy(player.wallet);
+  const connected = Boolean(player.wallet);
+
+  if (connected) {
+    return (
+      <HeaderShell status="Solana · connected (demo)">
+        <BalanceGrid
+          sol={formatSol(player.sol)}
+          goal={player.goalPoints}
+          address={player.wallet!}
+          onLogout={() => update(disconnectWallet(player))}
+          copy={copy}
+          copied={copied}
+        />
+      </HeaderShell>
+    );
+  }
+
+  return (
+    <HeaderShell status="Solana · not connected">
+      <div className="mt-5 rounded-2xl border border-dashed border-line bg-night/40 p-6 text-center">
+        <p className="mx-auto max-w-sm text-sm leading-relaxed text-muted">
+          Connect a Solana wallet to hold your SOL float, enter money pools, and mint your pulled
+          cards. Simulated for the demo — no real signing.
+        </p>
+        <button
+          onClick={() => update(connectWallet(player))}
+          className="mt-4 rounded-xl bg-volt px-6 py-3 font-extrabold uppercase tracking-wide text-night shadow-[0_0_28px_rgba(175,255,0,0.35)] transition-transform hover:scale-[1.03] active:translate-y-px"
+        >
+          Connect wallet
+        </button>
+      </div>
+    </HeaderShell>
   );
 }
 
@@ -267,9 +392,11 @@ function LedgerRow({ tx }: { tx: Tx }) {
 function Settings({
   player,
   update,
+  realWallet,
 }: {
   player: PlayerState;
   update: (p: PlayerState) => void;
+  realWallet: boolean;
 }) {
   const [handle, setHandle] = useState(player.handle ?? "");
   return (
@@ -312,15 +439,8 @@ function Settings({
         <h3 className="font-mono text-[11px] uppercase tracking-widest text-muted">Wallet</h3>
         <p className="mt-2 text-sm text-muted">
           {player.wallet ? shortAddress(player.wallet) : "No wallet connected."}
+          {realWallet && player.wallet ? " · live Solana balance" : ""}
         </p>
-        {player.wallet && (
-          <button
-            onClick={() => update(disconnectWallet(player))}
-            className="mt-3 rounded-xl border border-line bg-night px-5 py-2.5 text-sm font-semibold text-chalk transition-colors hover:border-down/60 hover:text-down"
-          >
-            Log out of wallet
-          </button>
-        )}
       </section>
 
       <section className="rounded-2xl border border-down/30 bg-down/5 p-5">
@@ -359,10 +479,10 @@ function Toggle({
     >
       <span className="text-sm text-chalk">{label}</span>
       <span
-        className={`relative h-6 w-11 rounded-full transition-colors ${on ? "bg-volt" : "bg-night border border-line"}`}
+        className={`relative h-6 w-11 rounded-full transition-colors ${on ? "bg-volt" : "border border-line bg-night"}`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-chalk transition-transform ${
+          className={`absolute top-0.5 h-5 w-5 rounded-full transition-transform ${
             on ? "translate-x-5" : "translate-x-0.5"
           }`}
           style={{ background: on ? "#0a0a0a" : "#9a9a92" }}
