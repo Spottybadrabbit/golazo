@@ -13,6 +13,8 @@ import type * as apikeys from "../apikeys.js";
 import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as game from "../game.js";
+import type * as merkle from "../merkle.js";
+import type * as merkleStore from "../merkleStore.js";
 import type * as players from "../players.js";
 import type * as poller from "../poller.js";
 import type * as pools from "../pools.js";
@@ -33,6 +35,8 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   feed: typeof feed;
   game: typeof game;
+  merkle: typeof merkle;
+  merkleStore: typeof merkleStore;
   players: typeof players;
   poller: typeof poller;
   pools: typeof pools;

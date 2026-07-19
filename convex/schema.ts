@@ -255,6 +255,20 @@ export default defineSchema({
     note: v.optional(v.string()),
   }).index("by_key", ["key"]),
 
+  // ── Merkle roots ("Miracle Tree"): tamper-evident commitment over the ──
+  // ── real live odds-tick history, recomputed on a cron ──────────────────
+  merkleRoots: defineTable({
+    fixtureId: v.number(),
+    root: v.string(),
+    leafCount: v.number(),
+    fromTs: v.number(),
+    toTs: v.number(),
+    algo: v.string(),
+    computedAt: v.number(),
+  })
+    .index("by_fixture", ["fixtureId"])
+    .index("by_computed", ["computedAt"]),
+
   // ── Developer API keys (issued from /technicaldoc, Clerk-gated) ───────
   apiKeys: defineTable({
     clerkId: v.string(),
