@@ -266,6 +266,10 @@ export interface LiveWorld {
   matches: MatchState[];
   featured: MatchState;
   nextTickAt: number;
+  /** Which feed produced this world: the deterministic sim (`liveWorld()`) or
+   * the real TxLINE live feed (lib/feed/txline-client). Optional so consumers
+   * that reconstruct a LiveWorld from JSON don't have to set it. */
+  source?: "sim" | "live";
   /** Only set when this world came from GET /api/live (live feed mode); see
    * lib/useLiveWorld.ts. The sim's own `liveWorld()` leaves it undefined and
    * callers compute the Hi-Lo round locally instead. */

@@ -122,6 +122,8 @@ export interface RoundClock {
  */
 export function useRoundClock(liveRound?: HiLoRound | null): RoundClock | null {
   const [clock, setClock] = useState<RoundClock | null>(null);
+  // Sim-mode cache of the current round, refreshed when it expires.
+  const roundRef = useRef<HiLoRound | null>(null);
 
   useEffect(() => {
     let raf = 0;

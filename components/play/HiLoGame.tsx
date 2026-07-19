@@ -80,6 +80,8 @@ function callTitle(streak: number): string {
 export default function HiLoGame() {
   const world = useLiveWorld();
   const clock = useRoundClock(world?.round ?? null);
+  const { recordGamePlay, logActivity } = usePersist();
+  const celebrate = useCelebrate();
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pick, setPick] = useState<Pick | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);

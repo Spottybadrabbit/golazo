@@ -52,6 +52,6 @@ export async function GET() {
         events: m.events.slice(-6),
       })),
     },
-    { headers },
+    { headers: { "Cache-Control": "no-store" } },
   );
 }
