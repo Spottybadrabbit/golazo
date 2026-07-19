@@ -9,6 +9,7 @@ import Lenis from "lenis";
 import HeroMascot from "@/components/HeroMascot";
 import LiveTicker from "@/components/LiveTicker";
 import SiteNav from "@/components/SiteNav";
+import BottomTabs from "@/components/BottomTabs";
 import { CARDS } from "@/lib/cards";
 import { useLiveWorld } from "@/lib/useLiveWorld";
 
@@ -110,7 +111,7 @@ export default function Landing() {
   }, []);
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="pb-16">
       <SiteNav />
       <Hero />
       <LiveTicker />
@@ -122,6 +123,7 @@ export default function Landing() {
       <PunditSection />
       <FairData />
       <Footer />
+      <BottomTabs />
     </div>
   );
 }
@@ -348,7 +350,7 @@ function CardsSection() {
               }`}
               style={{ transformOrigin: "50% 90%" }}
             >
-              <Image src={c.art} alt={c.title} fill sizes="16rem" className="object-cover" />
+              <Image src={c.art ?? "/assets/pack.jpg"} alt={c.title} fill sizes="16rem" className="object-cover" />
               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-night via-night/70 to-transparent p-3">
                 <div className="text-sm font-extrabold uppercase">{c.title}</div>
                 <div className="font-mono text-[11px] uppercase text-muted">
@@ -528,7 +530,7 @@ function PunditSection() {
         </div>
         <div data-rise className="relative">
           <Image
-            src="/assets/mascot.jpg"
+            src="/assets/mascot-volt.jpg"
             alt="Golo the pundit parrot, headset on, mid broadcast"
             width={520}
             height={520}

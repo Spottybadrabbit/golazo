@@ -231,6 +231,99 @@ body {
   transform: rotateY(180deg);
 }
 
+/* FUT card holographic sheen — a slow diagonal light sweep across the metal */
+@keyframes holo-sweep {
+  0% {
+    transform: translateX(-120%) translateY(-10%) rotate(8deg);
+  }
+  100% {
+    transform: translateX(220%) translateY(10%) rotate(8deg);
+  }
+}
+.fut-holo::before {
+  content: "";
+  position: absolute;
+  inset: -40% -60%;
+  background: linear-gradient(
+    100deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.5) 48%,
+    rgba(175, 255, 0, 0.35) 52%,
+    transparent 62%
+  );
+  mix-blend-mode: screen;
+  animation: holo-sweep 4.2s ease-in-out infinite;
+  pointer-events: none;
+}
+/* prismatic tint that shifts with hover tilt on legend cards */
+.fut-prism {
+  background:
+    radial-gradient(120% 80% at 30% 0%, rgba(255, 255, 255, 0.22), transparent 55%),
+    conic-gradient(
+      from 210deg at 50% 40%,
+      rgba(0, 212, 255, 0.14),
+      rgba(175, 255, 0, 0.18),
+      rgba(255, 210, 74, 0.16),
+      rgba(0, 212, 255, 0.14)
+    );
+  mix-blend-mode: overlay;
+}
+
+/* card walkout — rise + settle when a fresh pull is revealed */
+@keyframes walkout {
+  0% {
+    transform: translateY(40px) scale(0.82) rotateX(24deg);
+    opacity: 0;
+    filter: brightness(2.4);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1) rotateX(0deg);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+.walkout {
+  animation: walkout 0.9s cubic-bezier(0.16, 0.84, 0.3, 1) both;
+  transform-origin: 50% 100%;
+}
+
+/* full-bleed light burst behind a legend walkout */
+@keyframes burst-beam {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.2) scaleX(0.6);
+  }
+  30% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: scaleY(1.4) scaleX(1.1);
+  }
+}
+.burst-beam {
+  animation: burst-beam 1.1s ease-out forwards;
+}
+
+/* pack tap-flash overlay */
+@keyframes rip-flash {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.rip-flash {
+  animation: rip-flash 0.7s ease-out forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marquee-track,
   .marquee-fast,
@@ -240,7 +333,11 @@ body {
   .typing-dot,
   .confetti-piece,
   .card-shine::after,
-  .pack-glow {
+  .pack-glow,
+  .fut-holo::before,
+  .walkout,
+  .burst-beam,
+  .rip-flash {
     animation: none !important;
   }
   .flip-inner {

@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import WalletCenter from "@/components/wallet/WalletCenter";
+import WalletHub from "@/components/wallet/WalletHub";
 
 export const metadata: Metadata = {
   title: "Wallet. GOLAZO",
-  description: "Your GOLAZO wallet: SOL balance, in-app GOAL economy, earnings ledger.",
+  description: "Your Solana balance, GOAL points, transaction history, and settings.",
 };
 
 export default function WalletPage() {
   return (
     <AppShell>
-      <h1 className="sr-only">Wallet Center</h1>
-      <WalletCenter />
+      <WalletHub />
     </AppShell>
   );
 }

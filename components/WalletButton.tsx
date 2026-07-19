@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadPlayer, mockWalletAddress, savePlayer, shortAddress } from "@/lib/game";
+import { connectWallet, disconnectWallet, loadPlayer, savePlayer, shortAddress } from "@/lib/game";
 
 /** Demo Solana wallet connect: generates a session address, no real signing. */
 export default function WalletButton() {
@@ -14,17 +14,16 @@ export default function WalletButton() {
 
   const connect = () => {
     if (wallet) {
-      const p = loadPlayer();
-      savePlayer({ ...p, wallet: null });
+      const next = disconnectWallet(loadPlayer());
+      savePlayer(next);
       setWallet(null);
       return;
     }
     setConnecting(true);
     setTimeout(() => {
-      const address = mockWalletAddress();
-      const p = loadPlayer();
-      savePlayer({ ...p, wallet: address });
-      setWallet(address);
+      const next = connectWallet(loadPlayer());
+      savePlayer(next);
+      setWallet(next.wallet);
       setConnecting(false);
     }, 650);
   };

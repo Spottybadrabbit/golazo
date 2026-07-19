@@ -1,6 +1,6 @@
 "use client";
 
-import { SignInButton, UserButton, useUser } from "@clerk/nextjs";
+import { SignInButton, SignOutButton, UserButton, useUser } from "@clerk/nextjs";
 import WalletButton from "@/components/WalletButton";
 
 const clerkOn = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
@@ -37,6 +37,12 @@ function ClerkAuth() {
           {label}
         </span>
         <UserButton appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+        <SignOutButton>
+          <button className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1.5 text-xs font-semibold text-chalk transition-colors hover:border-down/60 hover:text-down active:translate-y-px">
+            <LogOutGlyph />
+            Log out
+          </button>
+        </SignOutButton>
       </div>
     );
   }
@@ -57,6 +63,16 @@ function WalletGlyph() {
       <rect x="1.5" y="3.5" width="13" height="9.5" rx="2" stroke="currentColor" strokeWidth="1.6" />
       <path d="M1.5 6.5h13" stroke="currentColor" strokeWidth="1.6" />
       <circle cx="11.2" cy="9.6" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function LogOutGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M6 2.5H3.5A1.5 1.5 0 0 0 2 4v8a1.5 1.5 0 0 0 1.5 1.5H6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M10 11l3-3-3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M13 8H6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

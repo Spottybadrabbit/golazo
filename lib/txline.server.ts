@@ -50,9 +50,18 @@ function headers(): HeadersInit {
   return h;
 }
 
+// Bound every upstream call. A slow or hung TxODDS endpoint must not stall the
+// serverless function until its max duration — on timeout we throw and the
+// caller returns null, so /api/live responds 503 (live-only, no sim fallback).
+const TXLINE_TIMEOUT_MS = 2500;
+
 async function txGet<T>(path: string): Promise<T> {
   const origin = process.env.TXLINE_API_ORIGIN as string;
-  const res = await fetch(`${origin}/api${path}`, { headers: headers(), cache: "no-store" });
+  const res = await fetch(`${origin}/api${path}`, {
+    headers: headers(),
+    cache: "no-store",
+    signal: AbortSignal.timeout(TXLINE_TIMEOUT_MS),
+  });
   if (!res.ok) throw new Error(`TxLINE ${path} -> ${res.status}`);
   return (await res.json()) as T;
 }
@@ -81,10 +90,21 @@ function emptyStats(): SideStats {
  * null on any failure so the caller can fall back to the simulator. Prefers the
  * England v France fixture when present.
  */
+// Warm-instance cache: the feed ticks ~every 12s, so serving a result up to a
+// few seconds old avoids two fresh upstream round-trips on every /api/live hit
+// (and a briefly-cached null keeps a down upstream from being hammered).
+const LIVE_TTL_MS = 5000;
+let liveCache: { at: number; value: MatchState | null } | null = null;
+
 export async function fetchLiveMarquee(): Promise<MatchState | null> {
+  const nowMs = Date.now();
+  if (liveCache && nowMs - liveCache.at < LIVE_TTL_MS) return liveCache.value;
   try {
     const fixtures = await txGet<TxFixture[]>("/worldcup/fixtures?status=live");
-    if (!fixtures.length) return null;
+    if (!fixtures.length) {
+      liveCache = { at: nowMs, value: null };
+      return null;
+    }
     const engFra = fixtures.find(
       (f) =>
         (f.home.code === "ENG" && f.away.code === "FRA") ||
@@ -94,7 +114,7 @@ export async function fetchLiveMarquee(): Promise<MatchState | null> {
     const odds = await txGet<TxOdds>(`/worldcup/odds/${fx.id}`);
     const probs = impliedProbs(odds);
     const stats: [SideStats, SideStats] = [emptyStats(), emptyStats()];
-    return {
+    const mapped: MatchState = {
       fixtureId: fx.id,
       cycle: 0,
       slot: -1,
@@ -110,7 +130,10 @@ export async function fetchLiveMarquee(): Promise<MatchState | null> {
       events: [],
       sequence: fx.sequence,
     };
+    liveCache = { at: nowMs, value: mapped };
+    return mapped;
   } catch {
+    liveCache = { at: nowMs, value: null };
     return null; // fall back to the simulator
   }
 }
