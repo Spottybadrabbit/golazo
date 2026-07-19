@@ -4,7 +4,7 @@ import SquadBoard from "@/components/squad/SquadBoard";
 
 export const metadata: Metadata = {
   title: "Squad sweepstake. GOLAZO",
-  description: "Friends drawn into nations, standings settled live by the TxLINE feed.",
+  description: "Create a sweepstakes group, share the invite link, and pick the live match together.",
 };
 
 export default function SquadPage() {

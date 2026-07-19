@@ -12,6 +12,7 @@ import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as game from "../game.js";
 import type * as poller from "../poller.js";
+import type * as pools from "../pools.js";
 import type * as teams from "../teams.js";
 import type * as txline from "../txline.js";
 import type * as wallet from "../wallet.js";
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   feed: typeof feed;
   game: typeof game;
   poller: typeof poller;
+  pools: typeof pools;
   teams: typeof teams;
   txline: typeof txline;
   wallet: typeof wallet;

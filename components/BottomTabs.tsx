@@ -7,7 +7,7 @@ const TABS = [
   { href: "/play", label: "Play", icon: PlayIcon },
   { href: "/matches", label: "Matches", icon: MatchIcon },
   { href: "/cards", label: "Cards", icon: CardsIcon },
-  { href: "/squad", label: "Squad", icon: SquadIcon },
+  { href: "/squad", label: "Sweeps", icon: SquadIcon },
   { href: "/pundit", label: "Pundit", icon: ChatIcon },
 ];
 
