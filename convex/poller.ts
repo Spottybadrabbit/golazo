@@ -19,6 +19,27 @@ const FAST_MS = 1500;
 const SLOW_MS = 45_000;
 const MAX_FIXTURES = 12; // cap fan-out per poll
 
+// Featured-fixture preference, applied over every fixture seen this poll:
+// live World Cup w/ odds > any World Cup w/ odds > any in-play w/ odds >
+// any fixture w/ odds > first fixture. Never a special-cased pair.
+interface Candidate {
+  fixtureId: number;
+  competition: string;
+  hasOdds: boolean;
+  inPlay: boolean;
+}
+
+function pickFeatured(candidates: Candidate[]): number | undefined {
+  const isWC = (c: Candidate) => /world cup/i.test(c.competition);
+  return (
+    candidates.find((c) => isWC(c) && c.hasOdds && c.inPlay)?.fixtureId ??
+    candidates.find((c) => isWC(c) && c.hasOdds)?.fixtureId ??
+    candidates.find((c) => c.hasOdds && c.inPlay)?.fixtureId ??
+    candidates.find((c) => c.hasOdds)?.fixtureId ??
+    candidates[0]?.fixtureId
+  );
+}
+
 export const poll = internalAction({
   args: {},
   handler: async (ctx): Promise<void> => {
@@ -31,8 +52,7 @@ export const poll = internalAction({
     }
 
     let anyInPlay = false;
-    let featuredId: number | undefined;
-    let engFra: number | undefined;
+    const candidates: Candidate[] = [];
 
     try {
       const fixtures = (await fetchFixtures()).slice(0, MAX_FIXTURES);
@@ -55,13 +75,44 @@ export const poll = internalAction({
             ? score.awayGoals
             : score.homeGoals
           : 0;
-        const phase = score?.final
-          ? "FT"
-          : inPlay
-            ? "LIVE"
-            : fx.gameState === 1
-              ? "SCHED"
-              : "SCHED";
+        const phase = score?.final ? "FT" : inPlay ? "LIVE" : "SCHED";
+
+        // A fixture with 1X2 odds — pre-match or in-play — gets the oriented
+        // odds+probs stored on the row and a tick appended, regardless of
+        // in-play status (pre-match odds are the whole point of this feed).
+        let oHome: number | undefined;
+        let oDraw: number | undefined;
+        let oAway: number | undefined;
+        let pHome: number | undefined;
+        let pDraw: number | undefined;
+        let pAway: number | undefined;
+
+        if (odds) {
+          oHome = fx.homeIsFirst ? odds.home : odds.away;
+          oAway = fx.homeIsFirst ? odds.away : odds.home;
+          oDraw = odds.draw;
+          const p = odds.pct
+            ? {
+                home: fx.homeIsFirst ? odds.pct.home : odds.pct.away,
+                draw: odds.pct.draw,
+                away: fx.homeIsFirst ? odds.pct.away : odds.pct.home,
+              }
+            : impliedProbs({ ...odds, home: oHome, away: oAway });
+          pHome = p.home;
+          pDraw = p.draw;
+          pAway = p.away;
+
+          await ctx.runMutation(internal.feed.appendTick, {
+            fixtureId: fx.fixtureId,
+            ts: now,
+            oddsHome: oHome,
+            oddsDraw: oDraw,
+            oddsAway: oAway,
+            pHome,
+            pDraw,
+            pAway,
+          });
+        }
 
         await ctx.runMutation(internal.feed.upsertFixture, {
           fixtureId: fx.fixtureId,
@@ -78,33 +129,27 @@ export const poll = internalAction({
           phase,
           inPlay,
           competition: fx.competition,
+          oddsHome: oHome,
+          oddsDraw: oDraw,
+          oddsAway: oAway,
+          pHome,
+          pDraw,
+          pAway,
+          startTime: fx.startTime,
         });
 
-        if (inPlay && odds) {
-          anyInPlay = true;
-          // orient odds to the display home/away
-          const oHome = fx.homeIsFirst ? odds.home : odds.away;
-          const oAway = fx.homeIsFirst ? odds.away : odds.home;
-          const p = impliedProbs({ ...odds, home: oHome, away: oAway });
-          await ctx.runMutation(internal.feed.appendTick, {
-            fixtureId: fx.fixtureId,
-            ts: now,
-            oddsHome: oHome,
-            oddsDraw: odds.draw,
-            oddsAway: oAway,
-            pHome: p.home,
-            pDraw: p.draw,
-            pAway: p.away,
-          });
-          if (featuredId === undefined) featuredId = fx.fixtureId;
-          const codes = [home.code, away.code];
-          if (codes.includes("ENG") && codes.includes("FRA")) engFra = fx.fixtureId;
-        }
+        if (inPlay) anyInPlay = true;
+        candidates.push({
+          fixtureId: fx.fixtureId,
+          competition: fx.competition,
+          hasOdds: Boolean(odds),
+          inPlay,
+        });
       }
 
       await ctx.runMutation(internal.feed.setPollState, {
         mode: "live",
-        featuredFixtureId: engFra ?? featuredId,
+        featuredFixtureId: pickFeatured(candidates),
         note: anyInPlay ? "in-play" : "no live fixtures",
       });
     } catch (e) {

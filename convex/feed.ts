@@ -20,6 +20,14 @@ export const upsertFixture = internalMutation({
     phase: v.string(),
     inPlay: v.boolean(),
     competition: v.string(),
+    // pre-match / live 1X2, oriented to display home/away (set once odds exist)
+    oddsHome: v.optional(v.number()),
+    oddsDraw: v.optional(v.number()),
+    oddsAway: v.optional(v.number()),
+    pHome: v.optional(v.number()),
+    pDraw: v.optional(v.number()),
+    pAway: v.optional(v.number()),
+    startTime: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -88,12 +96,45 @@ export const heartbeat = internalMutation({
 
 // ── public queries (auth-free — anonymous visitors read live scores) ──
 
-async function latestTick(ctx: any, fixtureId: number) {
-  return await ctx.db
-    .query("liveTicks")
-    .withIndex("by_fixture_ts", (q: any) => q.eq("fixtureId", fixtureId))
-    .order("desc")
-    .first();
+const isWorldCup = (competition: string) => /world cup/i.test(competition);
+
+function toLiveMatch(f: {
+  fixtureId: number;
+  homeCode: string;
+  homeName: string;
+  homeFlag: string;
+  awayCode: string;
+  awayName: string;
+  awayFlag: string;
+  homeGoals: number;
+  awayGoals: number;
+  minute?: number;
+  phase: string;
+  competition: string;
+  oddsHome?: number;
+  oddsDraw?: number;
+  oddsAway?: number;
+  pHome?: number;
+  pDraw?: number;
+  pAway?: number;
+  updatedAt: number;
+}) {
+  const phase = f.phase === "SCHED" ? "BREAK" : f.phase;
+  return {
+    fixtureId: f.fixtureId,
+    home: { code: f.homeCode, name: f.homeName, flag: f.homeFlag },
+    away: { code: f.awayCode, name: f.awayName, flag: f.awayFlag },
+    score: [f.homeGoals, f.awayGoals] as [number, number],
+    minute: f.minute ?? 0,
+    phase,
+    competition: f.competition,
+    odds:
+      f.oddsHome != null
+        ? { home: f.oddsHome, draw: f.oddsDraw ?? 0, away: f.oddsAway ?? 0 }
+        : null,
+    probs: f.pHome != null ? { home: f.pHome, draw: f.pDraw ?? 0, away: f.pAway ?? 0 } : null,
+    updatedAt: f.updatedAt,
+  };
 }
 
 export const live = query({
@@ -103,38 +144,30 @@ export const live = query({
       .query("pollState")
       .withIndex("by_key", (q) => q.eq("key", "global"))
       .unique();
-    const mode = state?.mode ?? "sim";
-    if (mode !== "live") return { mode, updatedAt: 0, featured: null, matches: [] };
+    const mode: "live" | "sim" = state?.mode === "live" ? "live" : "sim";
+    if (mode !== "live") {
+      return { mode: "sim" as const, updatedAt: Date.now(), featured: null, matches: [] };
+    }
 
     const fixtures = await ctx.db
       .query("liveFixtures")
       .withIndex("by_updated")
       .order("desc")
       .take(20);
-    const inPlay = fixtures.filter((f) => f.inPlay);
+    const matches = fixtures.map(toLiveMatch);
 
-    const withTicks = await Promise.all(
-      inPlay.map(async (f) => {
-        const t = await latestTick(ctx, f.fixtureId);
-        return {
-          fixtureId: f.fixtureId,
-          home: { code: f.homeCode, name: f.homeName, flag: f.homeFlag },
-          away: { code: f.awayCode, name: f.awayName, flag: f.awayFlag },
-          score: [f.homeGoals, f.awayGoals] as [number, number],
-          minute: f.minute ?? 0,
-          phase: f.phase,
-          competition: f.competition,
-          odds: t ? { home: t.oddsHome, draw: t.oddsDraw, away: t.oddsAway } : null,
-          probs: t ? { home: t.pHome, draw: t.pDraw, away: t.pAway } : null,
-          updatedAt: f.updatedAt,
-        };
-      }),
-    );
-
+    const inPlay = (m: (typeof matches)[number]) => m.phase === "LIVE" || m.phase === "HT";
     const featured =
-      withTicks.find((m) => m.fixtureId === state?.featuredFixtureId) ?? withTicks[0] ?? null;
-    const updatedAt = Math.max(0, ...withTicks.map((m) => m.updatedAt));
-    return { mode, updatedAt, featured, matches: withTicks };
+      matches.find((m) => m.fixtureId === state?.featuredFixtureId) ??
+      matches.find((m) => isWorldCup(m.competition) && m.odds && inPlay(m)) ??
+      matches.find((m) => isWorldCup(m.competition) && m.odds) ??
+      matches.find((m) => m.odds && inPlay(m)) ??
+      matches.find((m) => m.odds) ??
+      matches[0] ??
+      null;
+
+    const updatedAt = matches.length ? Math.max(...matches.map((m) => m.updatedAt)) : Date.now();
+    return { mode, updatedAt, featured, matches };
   },
 });
 

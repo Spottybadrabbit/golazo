@@ -78,9 +78,16 @@ export function buildLiveWorld(feed: LiveFeed, now: number): LiveWorld {
   };
 }
 
-/** True when the live feed is fresh enough to prefer over the simulator. */
+/** True when the live feed is fresh enough to prefer over the simulator.
+ *
+ * The Convex poller idles at ~45s between writes when nothing is in-play (and a
+ * missed poll can stretch a gap toward ~90s), so the staleness cutoff must sit
+ * comfortably above that — otherwise the featured pre-match odds would be judged
+ * "stale" mid-cycle and the UI would flicker back to the simulator. 3 minutes
+ * keeps real data on screen across idle cadence while still yielding if the
+ * poller truly dies. */
 export function liveIsFresh(feed: LiveFeed | null, now: number): feed is LiveFeed {
   return Boolean(
-    feed && feed.mode === "live" && feed.featured && now - feed.updatedAt < 30_000,
+    feed && feed.mode === "live" && feed.featured && now - feed.updatedAt < 180_000,
   );
 }

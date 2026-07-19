@@ -5,15 +5,17 @@
 // only near expiry (not per request), so a 1-2s poll does not mint a token
 // every tick.
 //
-// PROBE NOTES — confirm with `npm run txline:probe` against a live fixture,
-// then tighten the constants below (structure is correct; encodings are the
-// only guesses):
-//   • ODDS_MARKET_HINT — which `super_odds_type` is the 1X2 / match-odds market.
-//   • PRICE_SCALE      — integer encoding of `prices` (assumed decimal odds x1000).
-//   • GOAL_STAT_KEYS   — the ScoreStat `key`s for home/away goals and minute
-//                        (see /documentation/scores/soccer-feed).
-//   • IN_PLAY          — `in_running` on odds is the primary signal; GameState
-//                        1=scheduled, 6=cancelled.
+// PROBE NOTES — confirmed via live devnet probe:
+//   • 1X2 market   — SuperOddsType === "1X2_PARTICIPANT_RESULT", Prices.length
+//                    === 3, PriceNames ["part1","draw","part2"]; prefer
+//                    bookmaker "TXLineStablePriceDemargined", latest by Ts.
+//   • PRICE_SCALE  — Prices are decimal odds x1000 (2374 => 2.374).
+//   • GOAL_STAT_KEYS / STATUS_FINAL — still unconfirmed guesses for the score
+//                    snapshot's in-play stat encoding (see
+//                    /documentation/scores/soccer-feed); mapScore falls back
+//                    to 0 / null defensively.
+//   • IN_PLAY      — `in_running` on odds is the primary signal; GameState
+//                    1=scheduled, 6=cancelled.
 
 const ORIGIN = () => process.env.TXLINE_API_ORIGIN ?? "https://txline-dev.txodds.com";
 const TOKEN = () => process.env.TXLINE_API_TOKEN ?? "";
@@ -99,14 +101,22 @@ export async function fetchFixtures(): Promise<TxFixture[]> {
 }
 
 // ---- odds ----
-const ODDS_MARKET_HINT = /match|1x2|full.?time|winner/i; // confirm via probe
-const PRICE_SCALE = 1000; // assume decimal odds x1000; confirm via probe
+// Confirmed via live probe: the 1X2 market is SuperOddsType ===
+// "1X2_PARTICIPANT_RESULT" with Prices.length === 3, PriceNames
+// ["part1","draw","part2"], Prices = decimal odds x1000, Pct = already
+// de-vigged implied win% (strings, sum ~100). Prefer the demargined
+// bookmaker; take the latest by Ts.
+const PRICE_SCALE = 1000; // feed sends decimal odds x1000 (2374 => 2.374)
+const PREFERRED_BOOKMAKER = "TXLineStablePriceDemargined";
 
 export interface TxOdds {
   home: number;
   draw: number;
   away: number;
   inRunning: boolean;
+  // de-vigged implied win% (percent), oriented the SAME way as home/draw/away
+  // (i.e. still raw part1/draw/part2 here — the poller orients both together)
+  pct: { home: number; draw: number; away: number } | null;
 }
 
 function decodePrice(raw: number): number {
@@ -118,29 +128,37 @@ export function mapOdds(entries: any): TxOdds | null {
   const arr: any[] = Array.isArray(entries)
     ? entries
     : (pick(entries, "odds", "Odds", "data") ?? [entries]);
-  // prefer an in-running match-odds market, else any 3-way market
-  const three = arr.filter((o) => {
-    const names: string[] = pick(o, "price_names", "PriceNames", "priceNames") ?? [];
-    return names.length === 3;
-  });
+  // only the 1X2 market; latest by Ts; prefer the demargined bookmaker
+  const oneX2 = arr
+    .filter((o) => {
+      const type = String(pick(o, "super_odds_type", "SuperOddsType") ?? "");
+      const prices: any[] = pick(o, "prices", "Prices") ?? [];
+      return type === "1X2_PARTICIPANT_RESULT" && prices.length === 3;
+    })
+    .sort(
+      (a, b) => Number(pick(b, "ts", "Ts") ?? 0) - Number(pick(a, "ts", "Ts") ?? 0),
+    );
   const match =
-    three.find((o) => ODDS_MARKET_HINT.test(String(pick(o, "super_odds_type", "SuperOddsType") ?? ""))) ??
-    three.find((o) => Boolean(pick(o, "in_running", "InRunning"))) ??
-    three[0];
+    oneX2.find((o) => String(pick(o, "bookmaker", "Bookmaker") ?? "") === PREFERRED_BOOKMAKER) ??
+    oneX2[0];
   if (!match) return null;
-  const names: string[] = (pick(match, "price_names", "PriceNames", "priceNames") ?? []).map((s: any) =>
-    String(s).toLowerCase(),
-  );
+
   const prices: number[] = (pick(match, "prices", "Prices") ?? []).map((n: any) => Number(n));
-  const idx = (want: string[], pos: number) => {
-    const i = names.findIndex((n) => want.some((w) => n.includes(w)));
-    return i >= 0 ? i : pos;
-  };
+  const pctRaw: string[] | undefined = pick(match, "pct", "Pct");
+  const pct = pctRaw
+    ? {
+        home: Math.round(parseFloat(pctRaw[0]) * 10) / 10,
+        draw: Math.round(parseFloat(pctRaw[1]) * 10) / 10,
+        away: Math.round(parseFloat(pctRaw[2]) * 10) / 10,
+      }
+    : null;
+
   return {
-    home: decodePrice(prices[idx(["home", "1"], 0)]),
-    draw: decodePrice(prices[idx(["draw", "x"], 1)]),
-    away: decodePrice(prices[idx(["away", "2"], 2)]),
+    home: decodePrice(prices[0]),
+    draw: decodePrice(prices[1]),
+    away: decodePrice(prices[2]),
     inRunning: Boolean(pick(match, "in_running", "InRunning")),
+    pct,
   };
 }
 
@@ -154,9 +172,12 @@ export async function fetchOdds(fixtureId: number): Promise<TxOdds | null> {
 }
 
 // ---- scores ----
-// Confirm the exact goal/minute stat keys via probe + the Soccer Feed doc.
-const GOAL_STAT_KEYS = { home: [1001, 1], away: [1002, 2], minute: [1000, 3] };
-const STATUS_FINAL = 100;
+// Confirmed via live probe: an array of records, latest by Seq then Ts. The
+// pre-match record looks like { GameState:"scheduled", Action:"coverage_update",
+// Seq:0, Data:{}, Stats:{} }. In-play goal/minute fields are unconfirmed until
+// kickoff, so read defensively from `Data` (tolerant key names) and default to
+// 0 / null rather than throwing. final = Action==="game_finalised" or
+// GameState is "finished"/"ft".
 
 export interface TxScore {
   homeGoals: number;
@@ -166,31 +187,47 @@ export interface TxScore {
   final: boolean;
 }
 
-function statByKey(stats: any[], keys: number[]): number | undefined {
+// Tolerant numeric read from the score record's `Data` object; returns
+// undefined (not 0) when none of the keys are present, so callers can pick
+// their own default (0 for goals, null for minute).
+function numFromData(data: any, ...keys: string[]): number | undefined {
   for (const k of keys) {
-    const s = stats.find((x) => Number(pick(x, "key", "Key", "statKey")) === k);
-    if (s) return Number(pick(s, "value", "Value"));
+    const val = data?.[k];
+    if (typeof val === "number") return val;
+    if (typeof val === "string" && val.trim() !== "" && !isNaN(Number(val))) return Number(val);
   }
   return undefined;
 }
 
 export function mapScore(raw: any): TxScore {
-  // score snapshot may be an array of records or a summary object
-  const rec = Array.isArray(raw) ? raw[raw.length - 1] ?? {} : raw ?? {};
-  const stats: any[] = pick(rec, "stats", "Stats", "scoreStats", "ScoreStats") ?? [];
-  const directHome = pick(rec, "HomeScore", "homeScore", "scoreHome");
-  const directAway = pick(rec, "AwayScore", "awayScore", "scoreAway");
+  // score snapshot is an array of records; take the latest by Seq, then Ts.
+  const records: any[] = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  const rec =
+    records
+      .slice()
+      .sort(
+        (a, b) =>
+          Number(pick(b, "Seq", "seq") ?? 0) - Number(pick(a, "Seq", "seq") ?? 0) ||
+          Number(pick(b, "Ts", "ts") ?? 0) - Number(pick(a, "Ts", "ts") ?? 0),
+      )[0] ?? {};
+
+  const data = pick(rec, "Data", "data") ?? {};
+  const homeGoals = numFromData(data, "Participant1Score", "HomeScore", "Score1", "score1", "part1") ?? 0;
+  const awayGoals = numFromData(data, "Participant2Score", "AwayScore", "Score2", "score2", "part2") ?? 0;
+  const minuteRaw = numFromData(data, "Minute", "minute", "GameMinute", "clock");
+  const minute = minuteRaw === undefined ? null : minuteRaw;
+
   const statusId = pick(rec, "StatusId", "statusId", "status");
-  const action = String(pick(rec, "action", "Action") ?? "");
+  const action = String(pick(rec, "Action", "action") ?? "");
+  const gs = String(pick(rec, "GameState", "game_state") ?? "").toLowerCase();
+  const final = action === "game_finalised" || gs === "finished" || gs === "ft";
+
   return {
-    homeGoals: Number(directHome ?? statByKey(stats, GOAL_STAT_KEYS.home) ?? 0),
-    awayGoals: Number(directAway ?? statByKey(stats, GOAL_STAT_KEYS.away) ?? 0),
-    minute: (() => {
-      const m = pick(rec, "Minute", "minute") ?? statByKey(stats, GOAL_STAT_KEYS.minute);
-      return m === undefined ? null : Number(m);
-    })(),
+    homeGoals,
+    awayGoals,
+    minute,
     statusId: statusId === undefined ? null : Number(statusId),
-    final: action === "game_finalised" || Number(statusId) === STATUS_FINAL,
+    final,
   };
 }
 
