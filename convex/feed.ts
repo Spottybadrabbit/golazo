@@ -1,4 +1,4 @@
-import { query, internalMutation } from "./_generated/server";
+import { query, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
@@ -68,6 +68,7 @@ export const setPollState = internalMutation({
     mode: v.string(),
     featuredFixtureId: v.optional(v.number()),
     note: v.optional(v.string()),
+    loopId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -80,8 +81,23 @@ export const setPollState = internalMutation({
   },
 });
 
-// Heartbeat (cron, every 60s): restart the self-rescheduling poll loop if it
-// has stalled (deploy, crash). Only kicks when stale to avoid parallel loops.
+// The active poll loop id — the poll loop reads this to know if it's still the
+// leaseholder (else it stops, killing stray/duplicate loops).
+export const getLoopId = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const state = await ctx.db
+      .query("pollState")
+      .withIndex("by_key", (q) => q.eq("key", "global"))
+      .unique();
+    return state?.loopId ?? null;
+  },
+});
+
+// Heartbeat (cron, every 60s): ensure exactly ONE leased poll loop is alive.
+// Kicks a fresh loop (with a new lease id) when the loop is stale OR when the
+// state has no lease id yet (legacy/unmanaged loops) — the new lease then makes
+// any older, un-leased loops self-terminate on their next iteration.
 export const heartbeat = internalMutation({
   args: {},
   handler: async (ctx) => {
@@ -90,7 +106,21 @@ export const heartbeat = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", "global"))
       .unique();
     const stale = !state || Date.now() - state.lastPollAt > 90_000;
-    if (stale) await ctx.scheduler.runAfter(0, internal.poller.poll, {});
+    const unmanaged = state != null && !state.loopId;
+    if (stale || unmanaged) {
+      const loopId = `loop_${Math.random().toString(36).slice(2)}_${Date.now()}`;
+      if (state) {
+        await ctx.db.patch(state._id, { loopId, lastPollAt: Date.now() });
+      } else {
+        await ctx.db.insert("pollState", {
+          key: "global",
+          mode: "live",
+          lastPollAt: Date.now(),
+          loopId,
+        });
+      }
+      await ctx.scheduler.runAfter(0, internal.poller.poll, { loopId });
+    }
   },
 });
 

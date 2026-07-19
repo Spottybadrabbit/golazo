@@ -6,6 +6,7 @@
 
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { v } from "convex/values";
 import {
   fetchFixtures,
   fetchOdds,
@@ -41,13 +42,18 @@ function pickFeatured(candidates: Candidate[]): number | undefined {
 }
 
 export const poll = internalAction({
-  args: {},
-  handler: async (ctx): Promise<void> => {
+  args: { loopId: v.optional(v.string()) },
+  handler: async (ctx, { loopId }): Promise<void> => {
+    // Single-loop lease: if a newer loop has taken the lease, stop immediately
+    // (no reschedule) so stray/duplicate loops self-terminate.
+    const activeLoop = await ctx.runQuery(internal.feed.getLoopId, {});
+    if (loopId && activeLoop && activeLoop !== loopId) return;
+
     const mode = process.env.TXLINE_MODE ?? "sim";
     if (mode !== "live" || !process.env.TXLINE_API_TOKEN) {
       // Sim mode runs entirely client-side; nothing to poll. Record state and
       // do NOT self-reschedule (the heartbeat cron will re-check periodically).
-      await ctx.runMutation(internal.feed.setPollState, { mode: "sim" });
+      await ctx.runMutation(internal.feed.setPollState, { mode: "sim", loopId });
       return;
     }
 
@@ -158,15 +164,18 @@ export const poll = internalAction({
         mode: "live",
         featuredFixtureId: pickFeatured(candidates),
         note: anyInPlay ? "in-play" : "no live fixtures",
+        loopId,
       });
     } catch (e) {
       await ctx.runMutation(internal.feed.setPollState, {
         mode: "live",
         note: `poll error: ${(e as Error).message}`,
+        loopId,
       });
     }
 
-    // self-reschedule at the cadence the current state warrants
-    await ctx.scheduler.runAfter(anyInPlay ? FAST_MS : SLOW_MS, internal.poller.poll, {});
+    // self-reschedule at the cadence the current state warrants, carrying our
+    // lease id so a superseded loop stops on its next iteration.
+    await ctx.scheduler.runAfter(anyInPlay ? FAST_MS : SLOW_MS, internal.poller.poll, { loopId });
   },
 });

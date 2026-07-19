@@ -253,6 +253,9 @@ export default defineSchema({
     lastPollAt: v.number(),
     featuredFixtureId: v.optional(v.number()),
     note: v.optional(v.string()),
+    // Single-loop lease: only the poll loop whose id matches keeps running, so
+    // stray/duplicate loops (from redeploys or manual triggers) self-terminate.
+    loopId: v.optional(v.string()),
   }).index("by_key", ["key"]),
 
   // ── Merkle roots ("Miracle Tree"): tamper-evident commitment over the ──
