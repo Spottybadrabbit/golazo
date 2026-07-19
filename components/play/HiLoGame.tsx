@@ -241,7 +241,7 @@ export default function HiLoGame() {
             <div className="grid grid-cols-[1fr_auto] items-center gap-4 p-5">
               <div>
                 <p className="text-sm text-muted">
-                  {m.home.code} win probability — higher or lower by the next tick?
+                  {m.home.name} win probability — higher or lower by the next tick?
                 </p>
                 <div className="mt-2 flex items-end gap-2">
                   <span className="font-mono text-5xl font-semibold tracking-tight">

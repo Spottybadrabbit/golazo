@@ -115,8 +115,8 @@ export default function CardsGame() {
           Today&apos;s <span className="text-volt">pack</span>
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">
-          Only players from nations live on the feed right now. Two cards a pack — pull odds by
-          FIFA tier: 56% bronze, 32% silver, 12% gold.
+          Collectible <span className="text-chalk">nation cards</span> for the teams live on the
+          feed right now. Two cards a pack — pull odds by tier: 56% bronze, 32% silver, 12% gold.
         </p>
         <FixtureStrip slate={slate} featuredId={feed?.featured?.fixtureId ?? null} />
         <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">

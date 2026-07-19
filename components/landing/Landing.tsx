@@ -281,7 +281,7 @@ function DemoCard() {
             {m ? `${m.probs.home}%` : "50%"}
           </div>
           <div className="mt-1 font-mono text-[11px] uppercase tracking-widest text-muted">
-            {m ? `${m.home.code} win probability` : "win probability"}
+            {m ? `${m.home.name} win probability` : "win probability"}
           </div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-3">
