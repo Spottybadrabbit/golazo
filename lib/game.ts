@@ -65,9 +65,36 @@ export function loadPlayer(): PlayerState {
   }
 }
 
+// ---------- Convex write-through (registered by components/PlayerSync.tsx) ----------
+// game.ts stays framework-free — it never imports Convex/React. Instead,
+// PlayerSync registers these callbacks once the user is signed in (and clears
+// them again on sign-out), and savePlayer/pushTx fire them best-effort below.
+// localStorage remains the source of truth offline: a Convex hiccup here is
+// swallowed and never surfaces to the player.
+type PlayerSyncFn = (p: PlayerState) => void;
+type TxSyncFn = (p: PlayerState, tx: Tx) => void;
+
+let onPlayerSync: PlayerSyncFn | null = null;
+let onTxSync: TxSyncFn | null = null;
+
+/** Registered by PlayerSync once signed in; call with null to clear on sign-out. */
+export function registerPlayerSync(fn: PlayerSyncFn | null) {
+  onPlayerSync = fn;
+}
+
+/** Registered by PlayerSync once signed in; call with null to clear on sign-out. */
+export function registerTxSync(fn: TxSyncFn | null) {
+  onTxSync = fn;
+}
+
 export function savePlayer(p: PlayerState) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(KEY, JSON.stringify(p));
+  try {
+    onPlayerSync?.(p);
+  } catch {
+    /* Convex mirror is best-effort — localStorage already has the write */
+  }
 }
 
 export function multiplier(streak: number): number {
@@ -175,7 +202,13 @@ function txId(): string {
 /** Prepend a transaction to the ledger (capped so localStorage stays small). */
 export function pushTx(p: PlayerState, entry: Omit<Tx, "id" | "ts">): PlayerState {
   const tx: Tx = { id: txId(), ts: Date.now(), ...entry };
-  return { ...p, ledger: [tx, ...(p.ledger ?? [])].slice(0, 60) };
+  const next = { ...p, ledger: [tx, ...(p.ledger ?? [])].slice(0, 60) };
+  try {
+    onTxSync?.(next, tx);
+  } catch {
+    /* Convex mirror is best-effort — the local ledger already has the entry */
+  }
+  return next;
 }
 
 /** Connect the (simulated) Solana wallet: mint an address + starter SOL float. */

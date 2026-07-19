@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import Confetti from "@/components/Confetti";
 import { loadPlayer, savePlayer } from "@/lib/game";
+import { usePersist } from "@/components/PlayerSync";
 
 // Duolingo-style gamified onboarding for GOLAZO, skinned in the volt design
 // system. One decision per screen: welcome -> streak goal -> handle ->
@@ -42,6 +43,7 @@ const GOALS: Goal[] = [
 
 function OnboardingFlow() {
   const { isSignedIn, isLoaded } = useUser();
+  const { recordOnboarding, logActivity } = usePersist();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -94,6 +96,8 @@ function OnboardingFlow() {
     } catch {
       /* ignore storage failures — still close the overlay */
     }
+    recordOnboarding({ step: TOTAL_STEPS, goalId: goalId ?? undefined, handle: handle.trim(), completedAt: Date.now() });
+    logActivity("onboarding", "completed", undefined, { goalId, handle: handle.trim() });
     setOpen(false);
   }
 
@@ -103,6 +107,8 @@ function OnboardingFlow() {
     } catch {
       /* ignore */
     }
+    recordOnboarding({ step, skipped: true });
+    logActivity("onboarding", "skipped", undefined, { step });
     setOpen(false);
   }
 

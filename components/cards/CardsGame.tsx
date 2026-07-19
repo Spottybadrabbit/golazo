@@ -21,6 +21,7 @@ import { BADGES, loadPlayer, pushTx, savePlayer, type PlayerState } from "@/lib/
 import { useLiveFeed } from "@/components/LiveDataProvider";
 import type { LiveMatch } from "@/lib/live-map";
 import { useCelebrate } from "@/components/celebrate/Celebration";
+import { usePersist } from "@/components/PlayerSync";
 
 function bestTier(cards: CardDef[]): Tier {
   return cards.reduce<Tier>(
@@ -31,6 +32,7 @@ function bestTier(cards: CardDef[]): Tier {
 
 export default function CardsGame() {
   const celebrate = useCelebrate();
+  const { recordPackOpen, logActivity } = usePersist();
   const feed = useLiveFeed();
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pulled, setPulled] = useState<CardDef[] | null>(null);
@@ -80,6 +82,7 @@ export default function CardsGame() {
     const best = bestTier(cards);
     if (best !== "bronze") setBurst(Date.now());
     setNote(newBadges.length ? `Badge unlocked: ${newBadges[0].name}` : null);
+    recordPackOpen({ cost: PACK_COST, bestTier: best, cardCodes: cards.map((c) => c.code) });
     celebrate({
       kind: "card",
       title: best === "gold" ? "LEGEND PULL!" : best === "silver" ? "RARE PULL!" : "PACK OPENED!",
@@ -90,6 +93,7 @@ export default function CardsGame() {
       tone: best === "gold" ? "legend" : best === "silver" ? "cyan" : "volt",
       cta: "Add to collection",
     });
+    logActivity("celebration", "card", undefined, { bestTier: best });
   };
 
   const again = () => {

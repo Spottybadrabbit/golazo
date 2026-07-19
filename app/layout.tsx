@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import LiveDataProvider from "@/components/LiveDataProvider";
+import PlayerSync from "@/components/PlayerSync";
 import CelebrationProvider from "@/components/celebrate/Celebration";
 import OnboardingGate from "@/components/onboarding/OnboardingGate";
 import "./globals.css";
@@ -54,10 +55,12 @@ export default function RootLayout({
       <body className={`${outfit.variable} ${plexMono.variable} antialiased`}>
         <ConvexClientProvider>
           <LiveDataProvider>
-            <CelebrationProvider>
-              {children}
-              <OnboardingGate />
-            </CelebrationProvider>
+            <PlayerSync>
+              <CelebrationProvider>
+                {children}
+                <OnboardingGate />
+              </CelebrationProvider>
+            </PlayerSync>
           </LiveDataProvider>
         </ConvexClientProvider>
         <Analytics />

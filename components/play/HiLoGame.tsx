@@ -16,6 +16,7 @@ import {
 } from "@/lib/game";
 import { useLiveWorld, useRoundClock } from "@/lib/useLiveWorld";
 import { useCelebrate } from "@/components/celebrate/Celebration";
+import { usePersist } from "@/components/PlayerSync";
 
 type Pick = { roundId: string; choice: 1 | -1 };
 
@@ -52,6 +53,7 @@ export default function HiLoGame() {
   const world = useLiveWorld();
   const clock = useRoundClock();
   const celebrate = useCelebrate();
+  const { recordGamePlay, logActivity } = usePersist();
   const [player, setPlayer] = useState<PlayerState | null>(null);
   const [pick, setPick] = useState<Pick | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -103,6 +105,16 @@ export default function HiLoGame() {
       endValue,
       badge: newBadges[0]?.name,
     });
+    recordGamePlay({
+      game: "hilo",
+      fixtureId: world.featured.fixtureId,
+      roundRef: pick.roundId,
+      pick: pick.choice === 1 ? "higher" : "lower",
+      lockedProb: av,
+      result: push ? "void" : correct ? "win" : "loss",
+      delta: gained,
+      streakAfter: next.streak,
+    });
     if (correct) {
       setBurst(Date.now());
       celebrate({
@@ -118,10 +130,11 @@ export default function HiLoGame() {
         ],
         tone: next.streak >= 8 ? "legend" : "volt",
       });
+      logActivity("celebration", "goal", undefined, { streak: next.streak });
     }
     setPick(null);
     setBanked(null);
-  }, [clock, pick, player, world, celebrate]);
+  }, [clock, pick, player, world, celebrate, recordGamePlay, logActivity]);
 
   if (!clock || !player) {
     return (
@@ -173,6 +186,8 @@ export default function HiLoGame() {
     setPlayer(res.next);
     setBanked({ banked: res.banked, fee: res.fee });
     setBurst(Date.now());
+    logActivity("action", "bank", undefined, { streak: player.streak, banked: res.banked, fee: res.fee });
+    logActivity("celebration", "bank", undefined, { banked: res.banked });
     celebrate({
       kind: "bank",
       title: "BANKED!",

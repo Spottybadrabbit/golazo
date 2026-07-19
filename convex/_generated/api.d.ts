@@ -8,11 +8,14 @@
  * @module
  */
 
+import type * as activity from "../activity.js";
 import type * as crons from "../crons.js";
 import type * as feed from "../feed.js";
 import type * as game from "../game.js";
+import type * as players from "../players.js";
 import type * as poller from "../poller.js";
 import type * as pools from "../pools.js";
+import type * as profile from "../profile.js";
 import type * as teams from "../teams.js";
 import type * as txline from "../txline.js";
 import type * as wallet from "../wallet.js";
@@ -24,11 +27,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  activity: typeof activity;
   crons: typeof crons;
   feed: typeof feed;
   game: typeof game;
+  players: typeof players;
   poller: typeof poller;
   pools: typeof pools;
+  profile: typeof profile;
   teams: typeof teams;
   txline: typeof txline;
   wallet: typeof wallet;

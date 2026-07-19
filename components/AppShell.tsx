@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { BallMark } from "@/components/SiteNav";
 import AuthButton from "@/components/AuthButton";
 import BottomTabs from "@/components/BottomTabs";
 import WalletChip from "@/components/WalletChip";
+import { usePersist } from "@/components/PlayerSync";
 
 const NAV = [
   { href: "/play", label: "Play" },
@@ -22,6 +24,13 @@ const NAV = [
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { logActivity } = usePersist();
+
+  // Route-change screen view logging (Convex, signed-in only — no-op otherwise).
+  useEffect(() => {
+    logActivity("screen_view", pathname);
+  }, [pathname, logActivity]);
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 border-b border-line bg-night/85 backdrop-blur-md">
