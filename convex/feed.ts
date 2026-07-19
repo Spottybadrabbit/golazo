@@ -233,14 +233,21 @@ export const live = query({
     const matches = fixtures.map(toLiveMatch);
 
     const inPlay = (m: (typeof matches)[number]) => m.phase === "LIVE" || m.phase === "HT";
-    // Always feature the best REAL match: a World Cup game with odds wins over a
-    // stale poll pointer (which can drift to a no-odds friendly on a transient
-    // odds-fetch miss). Only honor the pointer if it actually has odds/in-play.
+    const maxProb = (m: (typeof matches)[number]) =>
+      m.probs ? Math.max(m.probs.home, m.probs.draw, m.probs.away) : 0;
+    // A "competitive" match is in-play, priced, and NOT a dead rubber — one
+    // outcome pinned ≥ 95% (e.g. a team 1-3 down late) makes a frozen, pointless
+    // Hi-Lo, so it must never be the marquee while a real contest is live.
+    const competitive = (m: (typeof matches)[number]) =>
+      Boolean(m.odds) && inPlay(m) && maxProb(m) < 95;
+    // matches come newest-updated first, so `find` also prefers the freshest.
     const featured =
+      matches.find((m) => isWorldCup(m.competition) && competitive(m)) ??
       matches.find((m) => isWorldCup(m.competition) && m.odds && inPlay(m)) ??
       matches.find((m) => isWorldCup(m.competition) && m.odds) ??
       // A World Cup match stays the marquee even if odds momentarily drop.
       matches.find((m) => isWorldCup(m.competition)) ??
+      matches.find((m) => competitive(m)) ??
       matches.find((m) => m.fixtureId === state?.featuredFixtureId && (m.odds || inPlay(m))) ??
       matches.find((m) => m.odds && inPlay(m)) ??
       matches.find((m) => m.odds) ??

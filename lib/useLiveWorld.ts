@@ -1,109 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import {
-  currentRound,
-  liveWorld,
-  type HiLoRound,
-  type LiveWorld,
-  type MatchState,
-} from "@/lib/engine";
+import { useEffect, useState } from "react";
+import { useLiveFeed } from "@/components/LiveDataProvider";
+import { buildLiveWorld } from "@/lib/live-map";
+import type { HiLoRound, LiveWorld } from "@/lib/engine";
 
-// Mirrors the server's TXLINE_MODE (see .env.local.example). The browser
-// bundle can only read NEXT_PUBLIC_-prefixed vars at build time, so this has
-// to be set separately and kept in sync for the client to actually switch
-// from the local simulator heartbeat to polling the server feed.
-const LIVE_MODE = process.env.NEXT_PUBLIC_FEED_MODE === "live";
+// The live world driving the game UI. There is NO simulator any more: this is
+// built entirely from the REAL TxODDS feed (Convex `feed:live` via
+// LiveDataProvider, with the /api/feed serverless poll as a same-source safety
+// net). Returns null until the first real featured match arrives — the UI shows
+// an "awaiting the live feed" state rather than ever fabricating a match.
 
-const MIN_POLL_MS = 2000;
-
-// Shape of each entry in GET /api/live's `matches` array: everything in
-// MatchState except the simulator-only `cycle`/`slot` bookkeeping fields
-// (see app/api/live/route.ts).
-type ApiMatch = Omit<MatchState, "cycle" | "slot">;
-
-interface ApiLiveResponse {
-  mode: "sim" | "live";
-  ready: boolean;
-  now: number;
-  nextTickAt: number;
-  round: HiLoRound;
-  matches: ApiMatch[];
-}
-
-function pickFeatured(matches: MatchState[]): MatchState | undefined {
-  const live = matches.filter((m) => m.phase === "LIVE");
-  return (live.length ? live : matches).sort((a, b) => b.minute - a.minute)[0];
-}
-
-/**
- * The live world driving the UI. In sim mode (default) this recomputes the
- * deterministic world every second so everything moves fluidly between feed
- * ticks. In live mode (NEXT_PUBLIC_FEED_MODE=live) it instead polls the
- * server's GET /api/live, re-fetching shortly after each `nextTickAt` (at
- * least every MIN_POLL_MS), and returns null until the first ready response.
- * Either way, server markup stays time-independent (null until mount) to
- * avoid hydration drift.
- */
 export function useLiveWorld(): LiveWorld | null {
-  const [world, setWorld] = useState<LiveWorld | null>(null);
-
+  const feed = useLiveFeed();
+  // A once-per-second clock so the countdown ring + round roll over smoothly
+  // between feed pushes. Null until mount keeps SSR markup time-independent.
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
-    if (!LIVE_MODE) {
-      const update = () => setWorld(liveWorld());
-      update();
-      const id = setInterval(update, 1000);
-      return () => clearInterval(id);
-    }
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const scheduleNext = (nextTickAt: number) => {
-      if (cancelled) return;
-      const delay = Math.max(MIN_POLL_MS, nextTickAt - Date.now() + 500);
-      timer = setTimeout(poll, delay);
-    };
-
-    const poll = async () => {
-      try {
-        const res = await fetch("/api/live", { cache: "no-store" });
-        if (res.ok) {
-          const data = (await res.json()) as ApiLiveResponse;
-          if (data.ready) {
-            const matches: MatchState[] = data.matches.map((m, idx) => ({
-              ...m,
-              cycle: 0,
-              slot: idx,
-            }));
-            const featured = pickFeatured(matches);
-            if (!cancelled && featured) {
-              setWorld({
-                now: data.now,
-                nextTickAt: data.nextTickAt,
-                matches,
-                featured,
-                round: data.round,
-              });
-            }
-            scheduleNext(data.nextTickAt);
-            return;
-          }
-        }
-      } catch {
-        // network hiccup — keep showing the last known world, retry shortly
-      }
-      scheduleNext(Date.now() + MIN_POLL_MS);
-    };
-
-    poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
 
-  return world;
+  if (now === null) return null;
+  if (!feed || feed.mode !== "live" || !feed.featured) return null;
+  return buildLiveWorld(feed, now);
 }
 
 export interface RoundClock {
@@ -114,40 +35,26 @@ export interface RoundClock {
 }
 
 /**
- * The active Hi-Lo round plus a smooth rAF-driven countdown. In sim mode
- * this computes the round locally (unchanged). In live mode it is driven by
- * the `round` supplied by the caller (from GET /api/live via useLiveWorld,
- * since Hi-Lo round timing stays simulator-driven either way — see
- * app/api/live/route.ts) rather than recomputed client-side.
+ * Count down the supplied real Hi-Lo round (from useLiveWorld → buildLiveWorld,
+ * a pure 12s wall-clock round). rAF-driven for a smooth ring; no simulator math.
  */
 export function useRoundClock(liveRound?: HiLoRound | null): RoundClock | null {
   const [clock, setClock] = useState<RoundClock | null>(null);
-  // Sim-mode cache of the current round, refreshed when it expires.
-  const roundRef = useRef<HiLoRound | null>(null);
 
   useEffect(() => {
     let raf = 0;
     const loop = () => {
-      const now = Date.now();
-      let round: HiLoRound | null;
-      if (LIVE_MODE) {
-        round = liveRound ?? null;
-      } else {
-        let r = roundRef.current;
-        if (!r || now >= r.endsAt) {
-          r = currentRound(now);
-          roundRef.current = r;
-        }
-        round = r;
-      }
-      if (round) {
-        const total = round.endsAt - round.startedAt;
-        const progress = Math.min(1, Math.max(0, (now - round.startedAt) / total));
+      if (liveRound) {
+        const now = Date.now();
+        const total = liveRound.endsAt - liveRound.startedAt;
+        const progress = Math.min(1, Math.max(0, (now - liveRound.startedAt) / total));
         setClock({
-          round,
+          round: liveRound,
           progress,
-          secondsLeft: Math.max(0, Math.ceil((round.endsAt - now) / 1000)),
+          secondsLeft: Math.max(0, Math.ceil((liveRound.endsAt - now) / 1000)),
         });
+      } else {
+        setClock(null);
       }
       raf = requestAnimationFrame(loop);
     };

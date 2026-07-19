@@ -201,6 +201,11 @@ interface Round {
  * the 12s ring, settle instantly, then re-arm for the next call. */
 function FastHiLoView({ featured, engine }: { featured: LiveMatch; engine: FastHiLoEngine }) {
   const celebrate = useCelebrate();
+  // Real team labels, never generic HOME/AWAY.
+  const teamLabel = (mk: Market) =>
+    mk === "home" ? featured.home.code : mk === "away" ? featured.away.code : "DRAW";
+  const teamName = (mk: Market) =>
+    mk === "home" ? featured.home.name : mk === "away" ? featured.away.name : "the draw";
   const [market, setMarket] = useState<Market>("home");
   const [stake, setStake] = useState<number>(STAKE_PRESETS[0]);
   const [phase, setPhase] = useState<Phase>("ready");
@@ -353,7 +358,7 @@ function FastHiLoView({ featured, engine }: { featured: LiveMatch; engine: FastH
                   : "border-line text-muted hover:border-volt/50 hover:text-chalk"
             }`}
           >
-            {MARKET_LABELS[mk]}
+            {teamLabel(mk)}
             {probs && <span className="ml-1 opacity-70">{round1(probs[mk])}%</span>}
           </button>
         ))}
@@ -363,7 +368,7 @@ function FastHiLoView({ featured, engine }: { featured: LiveMatch; engine: FastH
       <div className="grid grid-cols-[1fr_auto] items-center gap-4 py-5">
         <div>
           <p className="text-sm text-muted">
-            {MARKET_LABELS[market]} win probability — higher or lower in 12s?
+            {teamName(market)} win probability — higher or lower in 12s?
           </p>
           <div className="mt-2 flex items-end gap-2">
             <span className="font-mono text-5xl font-semibold tracking-tight">
