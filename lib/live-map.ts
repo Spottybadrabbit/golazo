@@ -11,6 +11,22 @@ export interface LiveTeam {
   name: string;
   flag: string;
 }
+export interface LiveStatLine {
+  goals: number;
+  corners: number;
+  shots: number;
+  shotsOnTarget: number;
+  yellow: number;
+  red: number;
+  fouls: number;
+}
+export interface LiveEvent {
+  seq: number;
+  minute: number;
+  action: string;
+  side: "home" | "away" | "";
+  detail: string;
+}
 export interface LiveMatch {
   fixtureId: number;
   home: LiveTeam;
@@ -21,6 +37,10 @@ export interface LiveMatch {
   competition: string;
   odds: { home: number; draw: number; away: number } | null;
   probs: { home: number; draw: number; away: number } | null;
+  /** Cumulative in-game stats, oriented home/away (null until the feed has them). */
+  stats?: { home: LiveStatLine; away: LiveStatLine } | null;
+  /** Recent notable events (oldest→newest by seq) — PunditBot streams these. */
+  events?: LiveEvent[];
   /** Kickoff time (unix ms) — drives day-aware Live/Upcoming/Past bucketing. */
   startTime?: number;
   updatedAt: number;

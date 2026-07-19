@@ -180,12 +180,133 @@ export async function fetchOdds(fixtureId: number): Promise<TxOdds | null> {
 // GameState is "finished"/"ft".
 
 export interface TxScore {
+  // Named home/away but carry participant1/participant2 values — the poller
+  // orients them to display home/away via fixture.homeIsFirst.
   homeGoals: number;
   awayGoals: number;
   minute: number | null;
   statusId: number | null;
   final: boolean;
   running: boolean;
+  // Cumulative in-game stats (p1/p2) + the recent notable-event stream.
+  stats: { p1: StatLine; p2: StatLine };
+  events: TxEvent[];
+}
+
+// ---- in-game stats accumulator + event stream (confirmed via live probe) ----
+// The scores snapshot carries, per record, a cumulative `Score` accumulator
+// ({ Participant1: { Total: { Goals, Corners, YellowCards, RedCards, Shots,
+// ShotsOnTarget, Fouls } }, Participant2: {...} }) and an `Action` event
+// (goal / yellow_card / corner / shot / free_kick / substitution / injury …)
+// with a Clock and a Participant (1|2). Keys are optional (absent → 0). Both
+// are p1/p2 — the poller orients to home/away.
+
+export interface StatLine {
+  goals: number;
+  corners: number;
+  shots: number;
+  shotsOnTarget: number;
+  yellow: number;
+  red: number;
+  fouls: number;
+}
+
+const ZERO_STATS: StatLine = {
+  goals: 0,
+  corners: 0,
+  shots: 0,
+  shotsOnTarget: 0,
+  yellow: 0,
+  red: 0,
+  fouls: 0,
+};
+
+function statLineFrom(total: any): StatLine {
+  const n = (...keys: string[]): number => {
+    for (const k of keys) {
+      const val = total?.[k];
+      if (typeof val === "number") return val;
+      if (typeof val === "string" && val.trim() !== "" && !isNaN(Number(val))) return Number(val);
+    }
+    return 0;
+  };
+  return {
+    goals: n("Goals", "goals"),
+    corners: n("Corners", "corners"),
+    shots: n("Shots", "shots"),
+    shotsOnTarget: n("ShotsOnTarget", "shots_on_target"),
+    yellow: n("YellowCards", "yellow_cards"),
+    red: n("RedCards", "red_cards"),
+    fouls: n("Fouls", "fouls"),
+  };
+}
+
+/** Cumulative stats: read the richest `Score` accumulator (highest Seq that
+ * carries one), ParticipantN.Total. Returns zeros when no accumulator present. */
+export function extractStats(records: any[]): { p1: StatLine; p2: StatLine } {
+  let best: any = null;
+  let bestSeq = -Infinity;
+  for (const r of records) {
+    const sc = pick(r, "Score", "score");
+    if (sc && (sc.Participant1 || sc.Participant2 || sc.participant1 || sc.participant2)) {
+      const seq = Number(pick(r, "Seq", "seq") ?? 0);
+      if (seq >= bestSeq) {
+        bestSeq = seq;
+        best = sc;
+      }
+    }
+  }
+  if (!best) return { p1: { ...ZERO_STATS }, p2: { ...ZERO_STATS } };
+  const p1 = pick(best, "Participant1", "participant1") ?? {};
+  const p2 = pick(best, "Participant2", "participant2") ?? {};
+  return {
+    p1: statLineFrom(pick(p1, "Total", "total") ?? {}),
+    p2: statLineFrom(pick(p2, "Total", "total") ?? {}),
+  };
+}
+
+export interface TxEvent {
+  seq: number;
+  minute: number;
+  action: string;
+  participant: 0 | 1 | 2; // 0 = unattributed
+  detail: string;
+}
+
+const NOTABLE_ACTIONS = new Set([
+  "goal",
+  "yellow_card",
+  "red_card",
+  "penalty",
+  "corner",
+  "shot",
+  "free_kick",
+  "substitution",
+  "injury",
+]);
+
+/** The most recent notable match events, oldest→newest by Seq. */
+export function extractEvents(records: any[], limit = 14): TxEvent[] {
+  const out: TxEvent[] = [];
+  for (const r of records) {
+    const action = String(pick(r, "Action", "action") ?? "").toLowerCase();
+    if (!NOTABLE_ACTIONS.has(action)) continue;
+    const c = pick(r, "Clock", "clock");
+    const secs =
+      typeof c?.Seconds === "number" ? c.Seconds : typeof c?.seconds === "number" ? c.seconds : 0;
+    const p = Number(pick(r, "Participant", "participant") ?? 0);
+    const data = pick(r, "Data", "data") ?? {};
+    const detail = String(pick(data, "Outcome", "outcome", "FreeKickType", "free_kick_type") ?? "");
+    out.push({
+      seq: Number(pick(r, "Seq", "seq") ?? 0),
+      minute: Math.floor(secs / 60),
+      action,
+      participant: p === 1 || p === 2 ? (p as 1 | 2) : 0,
+      detail,
+    });
+  }
+  out.sort((a, b) => a.seq - b.seq);
+  return out.slice(-limit);
 }
 
 // Tolerant numeric read from the score record's `Data` object; returns
@@ -246,7 +367,16 @@ export function mapScore(raw: any): TxScore {
 
   const data = pick(rec, "Data", "data") ?? {};
   const stats = pick(rec, "Stats", "stats") ?? {};
-  const goals = extractGoals(rec);
+
+  // Goals come from the cumulative `Score` accumulator when the feed provides
+  // one (authoritative — a real 0-0 reads as 0-0); otherwise fall back to the
+  // wide-net guess. Stats + the notable-event stream ride along.
+  const acc = extractStats(records);
+  const events = extractEvents(records);
+  const hasScoreObj = records.some((r) => pick(r, "Score", "score"));
+  const fallback = hasScoreObj ? { home: undefined, away: undefined } : extractGoals(rec);
+  const homeGoals = hasScoreObj ? acc.p1.goals : (fallback.home ?? 0);
+  const awayGoals = hasScoreObj ? acc.p2.goals : (fallback.away ?? 0);
 
   // Match minute comes from the feed's Clock: { Running, Seconds } (elapsed match
   // time). Trailing heartbeat/coverage records can carry Seconds:0 with the
@@ -273,23 +403,15 @@ export function mapScore(raw: any): TxScore {
   const gs = String(pick(rec, "GameState", "game_state") ?? "").toLowerCase();
   const final = action === "game_finalised" || gs === "finished" || gs === "ft";
 
-  // Self-diagnose at kickoff: if a record carries payload but we couldn't read
-  // goals, log the real shape once so the key names can be pinned fast.
-  const populated = Object.keys(data).length + Object.keys(stats).length > 0;
-  if (populated && goals.home === undefined && goals.away === undefined) {
-    console.warn(
-      "[txline mapScore] populated record, goals unresolved:",
-      JSON.stringify({ Data: data, Stats: stats }).slice(0, 600),
-    );
-  }
-
   return {
-    homeGoals: goals.home ?? 0,
-    awayGoals: goals.away ?? 0,
+    homeGoals,
+    awayGoals,
     minute,
     statusId: statusId === undefined ? null : Number(statusId),
     final,
     running,
+    stats: acc,
+    events,
   };
 }
 
