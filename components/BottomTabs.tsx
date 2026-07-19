@@ -8,7 +8,7 @@ const TABS = [
   { href: "/matches", label: "Matches", icon: MatchIcon },
   { href: "/cards", label: "Cards", icon: CardsIcon },
   { href: "/squad", label: "Sweeps", icon: SquadIcon },
-  { href: "/pundit", label: "Pundit", icon: ChatIcon },
+  { href: "/profile", label: "Profile", icon: ProfileIcon },
 ];
 
 /**
@@ -87,19 +87,17 @@ function SquadIcon({ active }: { active: boolean }) {
   );
 }
 
-function ChatIcon({ active }: { active: boolean }) {
+function ProfileIcon({ active }: { active: boolean }) {
   const c = active ? "#AFFF00" : "#9A9A92";
   return (
     <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+      <circle cx="11" cy="7.6" r="3.4" stroke={c} strokeWidth="2" />
       <path
-        d="M4 6.5A2.5 2.5 0 016.5 4h9A2.5 2.5 0 0118 6.5v6a2.5 2.5 0 01-2.5 2.5H9l-3.6 3v-3H6.5A2.5 2.5 0 014 12.5v-6z"
+        d="M4.6 18v-.9c0-2.7 3-4.9 6.4-4.9s6.4 2.2 6.4 4.9v.9"
         stroke={c}
         strokeWidth="2"
-        strokeLinejoin="round"
+        strokeLinecap="round"
       />
-      <circle cx="8.4" cy="9.6" r="1" fill={c} />
-      <circle cx="11.2" cy="9.6" r="1" fill={c} />
-      <circle cx="14" cy="9.6" r="1" fill={c} />
     </svg>
   );
 }

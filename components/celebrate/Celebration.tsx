@@ -115,6 +115,21 @@ function Overlay({
   const accent = TONE_ACCENT[tone];
   const legend = tone === "legend";
 
+  // One-shot check, same pattern as `celebrate()` above — no live listener,
+  // this overlay fully remounts between separate celebrations anyway.
+  const [reducedMotion] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const [videoFailed, setVideoFailed] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const showVideo = !reducedMotion && !videoFailed;
+
+  useEffect(() => {
+    if (showVideo) videoRef.current?.play().catch(() => {});
+  }, [showVideo, burst]);
+
   return (
     <div
       role="dialog"
@@ -158,14 +173,29 @@ function Overlay({
         </div>
 
         <div className="relative mx-auto mb-4 w-40">
-          <Image
-            src="/assets/mascot-volt.jpg"
-            alt="Golo celebrating"
-            width={320}
-            height={320}
-            priority
-            className="walkout mx-auto w-40 rounded-3xl"
-          />
+          {showVideo ? (
+            <video
+              key={burst}
+              ref={videoRef}
+              src="/assets/golo/golo-cheer.mp4"
+              muted
+              playsInline
+              autoPlay
+              preload="auto"
+              onError={() => setVideoFailed(true)}
+              aria-label="Golo celebrating"
+              className="walkout mx-auto w-40 rounded-3xl object-contain"
+            />
+          ) : (
+            <Image
+              src="/assets/mascot-volt.jpg"
+              alt="Golo celebrating"
+              width={320}
+              height={320}
+              priority
+              className="walkout mx-auto w-40 rounded-3xl"
+            />
+          )}
           <span className="absolute -right-1 -top-1 text-3xl">{kd.emoji}</span>
         </div>
 
