@@ -11,4 +11,9 @@ crons.interval("txodds poll heartbeat", { seconds: 60 }, internal.feed.heartbeat
 // history every 5 minutes, as an on-chain-style validation commitment.
 crons.interval("miracle tree merkle roots", { minutes: 5 }, internal.merkle.computeRoots, {});
 
+// Settlement engine heartbeat — keeps the second-by-second settlement sweep
+// alive (it self-reschedules ~1s while bets are queued). This restarts it if
+// it ever stalls, so pool-bet payouts always land when a match finishes.
+crons.interval("settlement heartbeat", { seconds: 60 }, internal.settlement.heartbeat, {});
+
 export default crons;

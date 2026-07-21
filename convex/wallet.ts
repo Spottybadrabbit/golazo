@@ -122,6 +122,48 @@ export const playBalance = query({
   },
 });
 
+/** Fixed set of play-money GOAL amounts the top-up screen offers. */
+const TOP_UP_AMOUNTS = [50, 100, 250, 500];
+
+/**
+ * Credit play-money GOAL to the signed-in player: writes a "promo" ledger
+ * row (so it shows up in the bank-balance history) and updates
+ * `players.goalPoints` — the balance every other screen reads. Honest
+ * play-money only; never touches SOL or anything on-chain.
+ */
+export const topUp = mutation({
+  args: { amount: v.number() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    if (!TOP_UP_AMOUNTS.includes(args.amount)) throw new Error("Invalid top-up amount");
+    const clerkId = identity.subject;
+
+    const player = await ctx.db
+      .query("players")
+      .withIndex("by_clerk", (q) => q.eq("clerkId", clerkId))
+      .unique();
+    const prior = player?.goalPoints ?? 0;
+    const balanceAfter = prior + args.amount;
+
+    await ctx.db.insert("ledger", {
+      clerkId,
+      kind: "promo",
+      currency: "GOAL",
+      amount: args.amount,
+      balanceAfter,
+      reason: `Play-money top-up · +${args.amount} GOAL`,
+      createdAt: Date.now(),
+    });
+
+    if (player) {
+      await ctx.db.patch(player._id, { goalPoints: balanceAfter, updatedAt: Date.now() });
+    }
+
+    return balanceAfter;
+  },
+});
+
 /**
  * Place a fast (12s) Hi-Lo micro-prediction bet on the live featured match's
  * real win-probability (components/play/FastHiLo.tsx). The stake is the
@@ -132,7 +174,10 @@ export const playBalance = query({
 export const placeFastBet = mutation({
   args: {
     fixtureId: v.number(),
-    market: v.union(v.literal("home"), v.literal("draw"), v.literal("away")),
+    // "home" | "draw" | "away" for win-prob Hi-Lo, or an event-stream stat
+    // market for Stat Hi-Lo ("corner_next", "shot_target_next", "card_next",
+    // "corners_ou", …). The bets table already stores market as a free string.
+    market: v.string(),
     direction: v.union(v.literal("higher"), v.literal("lower")),
     stakeSol: v.number(),
     lockedValue: v.number(),

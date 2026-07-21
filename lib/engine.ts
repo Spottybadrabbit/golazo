@@ -539,9 +539,19 @@ const SQUAD_HANDLES = [
   "MinuteNinety",
   "FalseNineFelix",
   "CleanSheetCleo",
+  "OffsideOracle",
+  "SweeperKeeperSam",
+  "LastManStanding",
+  "OverlapOscar",
+  "PenaltyPaula",
+  "GoldenBootGio",
+  "InjuryTimeIvy",
+  "CornerFlagChad",
 ];
 
-/** Deterministic sweepstakes standings for the demo squad, evolving per cycle. */
+/** Deterministic sweepstakes standings for the demo squad, evolving per cycle.
+ * Backs the GLOBAL leaderboard on the squad/sweepstakes page — 16+ members
+ * even before the signed-in user (`userHandle`) is appended. */
 export function squadStandings(now: number = Date.now(), userHandle?: string): SquadMember[] {
   const { cycle } = slotPosition(now, 0);
   const handles = [...SQUAD_HANDLES];

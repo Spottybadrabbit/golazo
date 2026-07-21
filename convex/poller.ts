@@ -83,6 +83,25 @@ export const poll = internalAction({
           : 0;
         const phase = score?.final ? "FT" : inPlay ? "LIVE" : "SCHED";
 
+        // Orient the in-game stats + notable-event stream to display home/away.
+        // stats/events are p1/p2 from the mapper; home = p1 when homeIsFirst.
+        const statsHome = score ? (fx.homeIsFirst ? score.stats.p1 : score.stats.p2) : undefined;
+        const statsAway = score ? (fx.homeIsFirst ? score.stats.p2 : score.stats.p1) : undefined;
+        const recentEvents = score
+          ? score.events.map((e) => ({
+              seq: e.seq,
+              minute: e.minute,
+              action: e.action,
+              side:
+                e.participant === 0
+                  ? ""
+                  : (e.participant === 1) === fx.homeIsFirst
+                    ? "home"
+                    : "away",
+              detail: e.detail,
+            }))
+          : undefined;
+
         // A fixture with 1X2 odds — pre-match or in-play — gets the oriented
         // odds+probs stored on the row and a tick appended, regardless of
         // in-play status (pre-match odds are the whole point of this feed).
@@ -147,6 +166,15 @@ export const poll = internalAction({
           upsertArgs.pHome = pHome;
           upsertArgs.pDraw = pDraw;
           upsertArgs.pAway = pAway;
+        }
+        // Only write stats/events when we fetched a score this poll — omitting
+        // them on a transient miss preserves last-known (same rule as odds).
+        if (statsHome && statsAway) {
+          upsertArgs.statsHome = statsHome;
+          upsertArgs.statsAway = statsAway;
+        }
+        if (recentEvents && recentEvents.length) {
+          upsertArgs.recentEvents = recentEvents;
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await ctx.runMutation(internal.feed.upsertFixture, upsertArgs as any);

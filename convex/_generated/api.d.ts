@@ -20,6 +20,7 @@ import type * as players from "../players.js";
 import type * as poller from "../poller.js";
 import type * as pools from "../pools.js";
 import type * as profile from "../profile.js";
+import type * as settlement from "../settlement.js";
 import type * as teams from "../teams.js";
 import type * as touchline from "../touchline.js";
 import type * as touchlineVerify from "../touchlineVerify.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   poller: typeof poller;
   pools: typeof pools;
   profile: typeof profile;
+  settlement: typeof settlement;
   teams: typeof teams;
   touchline: typeof touchline;
   touchlineVerify: typeof touchlineVerify;

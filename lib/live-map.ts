@@ -4,12 +4,50 @@
 // possession/shots/pressure, so those are marked absent (source: "live") and
 // components render "—" rather than fabricating them.
 
-import type { LiveWorld, MatchPhase, MatchState, SideStats, Team } from "@/lib/engine";
+import type { HiLoRound, LiveWorld, MatchPhase, MatchState, SideStats, Team } from "@/lib/engine";
+
+const ROUND_MS = 12_000;
+
+/** A pure 12-second wall-clock Hi-Lo round for the featured match — the real
+ * replacement for the deleted simulator's `currentRound()`. Deterministic from
+ * the clock alone, so it never drifts or sticks. */
+function wallClockRound(featured: MatchState, now: number): HiLoRound {
+  const idx = Math.floor(now / ROUND_MS);
+  const startedAt = idx * ROUND_MS;
+  return {
+    id: `w-${featured.fixtureId}-${idx}`,
+    fixtureId: featured.fixtureId,
+    stat: "WIN",
+    statLabel: "win probability",
+    question: `${featured.home.name} win probability — higher or lower by the next tick?`,
+    lockValue: Math.round(featured.probs.home * 10) / 10,
+    unit: "%",
+    startedAt,
+    endsAt: startedAt + ROUND_MS,
+    team: featured.home.code,
+  };
+}
 
 export interface LiveTeam {
   code: string;
   name: string;
   flag: string;
+}
+export interface LiveStatLine {
+  goals: number;
+  corners: number;
+  shots: number;
+  shotsOnTarget: number;
+  yellow: number;
+  red: number;
+  fouls: number;
+}
+export interface LiveEvent {
+  seq: number;
+  minute: number;
+  action: string;
+  side: "home" | "away" | "";
+  detail: string;
 }
 export interface LiveMatch {
   fixtureId: number;
@@ -21,6 +59,10 @@ export interface LiveMatch {
   competition: string;
   odds: { home: number; draw: number; away: number } | null;
   probs: { home: number; draw: number; away: number } | null;
+  /** Cumulative in-game stats, oriented home/away (null until the feed has them). */
+  stats?: { home: LiveStatLine; away: LiveStatLine } | null;
+  /** Recent notable events (oldest→newest by seq) — PunditBot streams these. */
+  events?: LiveEvent[];
   /** Kickoff time (unix ms) — drives day-aware Live/Upcoming/Past bucketing. */
   startTime?: number;
   updatedAt: number;
@@ -67,15 +109,18 @@ function toMatchState(m: LiveMatch): MatchState {
   };
 }
 
-/** Build a LiveWorld from the reactive Convex live feed. */
+/** Build a LiveWorld from the reactive Convex live feed. This is the ONLY
+ * producer of the game world now — the deterministic simulator is gone. */
 export function buildLiveWorld(feed: LiveFeed, now: number): LiveWorld {
   const matches = feed.matches.map(toMatchState);
   const featured = feed.featured ? toMatchState(feed.featured) : matches[0];
+  const idx = Math.floor(now / ROUND_MS);
   return {
     now,
     matches: matches.length ? matches : featured ? [featured] : [],
     featured,
-    nextTickAt: now + 2000,
+    nextTickAt: (idx + 1) * ROUND_MS,
+    round: featured ? wallClockRound(featured, now) : undefined,
     source: "live",
   };
 }

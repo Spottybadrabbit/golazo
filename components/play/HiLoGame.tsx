@@ -46,8 +46,6 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 
 type Market = "home" | "draw" | "away";
 
-const MARKET_LABELS: Record<Market, string> = { home: "HOME", draw: "DRAW", away: "AWAY" };
-
 /** Value stored + timestamped every time the selected market's live value
  * changes — the small history a Hi-Lo round needs to show the "edge": how
  * the stat has moved over roughly the last round. */
@@ -348,7 +346,7 @@ export default function HiLoGame() {
                         : "border-line text-muted hover:border-volt/50 hover:text-chalk"
                   }`}
                 >
-                  {MARKET_LABELS[mk]}
+                  {mk === "home" ? m.home.code : mk === "away" ? m.away.code : "DRAW"}
                 </button>
               ))}
             </div>
