@@ -8,6 +8,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Lenis from "lenis";
 import HeroMascot from "@/components/HeroMascot";
 import LiveTicker from "@/components/LiveTicker";
+import NewFeatures from "@/components/landing/NewFeatures";
 import SiteNav from "@/components/SiteNav";
 import BottomTabs from "@/components/BottomTabs";
 import { CARDS } from "@/lib/cards";
@@ -116,6 +117,7 @@ export default function Landing() {
       <SiteNav />
       <Hero />
       <LiveTicker />
+      <NewFeatures />
       <HowItPlays />
       <StatBand />
       <CardsSection />
