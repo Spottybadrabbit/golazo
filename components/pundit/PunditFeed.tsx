@@ -3,9 +3,61 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "convex/react";
+import { makeFunctionReference } from "convex/server";
 import { useLiveFeed } from "@/components/LiveDataProvider";
 import { useFavorites } from "@/lib/favorites";
 import { recommendHiLo, fmtMove } from "@/lib/hilo-edge";
+
+// Full-match recap for the focused favorited match (convex/feed.ts:recap).
+const recapRef = makeFunctionReference<"query">("feed:recap");
+
+interface RecapEvent {
+  seq: number;
+  minute: number;
+  action: string;
+  side: string;
+  detail: string;
+}
+interface RecapData {
+  fixtureId: number;
+  homeCode: string;
+  awayCode: string;
+  homeName: string;
+  awayName: string;
+  score: [number, number];
+  minute: number;
+  phase: string;
+  probs: { home: number; draw: number; away: number } | null;
+  events: RecapEvent[];
+}
+
+/** Turn one recorded match event into a Golo recap line. */
+function recapLine(e: RecapEvent, homeCode: string, awayCode: string): { text: string; kind: "event" | "note" } {
+  const team = e.side === "home" ? homeCode : e.side === "away" ? awayCode : "";
+  const at = `${e.minute}'`;
+  const who = team ? ` ${team}` : "";
+  switch (e.action) {
+    case "goal":
+      return { text: `${at} ⚽ GOAL —${who}! The market lurches.`, kind: "event" };
+    case "red_card":
+      return { text: `${at} 🟥 RED CARD —${who} down to ten.`, kind: "event" };
+    case "yellow_card":
+      return { text: `${at} 🟨 Booking —${who}.`, kind: "note" };
+    case "corner":
+      return { text: `${at} Corner${who ? ` won by${who}` : ""}.`, kind: "note" };
+    case "shot":
+      return { text: `${at} Shot${who} — ${e.detail || "on the move"}.`, kind: "note" };
+    case "free_kick":
+      return { text: `${at} Free kick${e.detail ? ` (${e.detail})` : ""}.`, kind: "note" };
+    case "substitution":
+      return { text: `${at} Substitution${who}.`, kind: "note" };
+    case "injury":
+      return { text: `${at} Play stops — injury.`, kind: "note" };
+    default:
+      return { text: `${at} ${e.action.replace(/_/g, " ")}${who}.`, kind: "note" };
+  }
+}
 
 // Golo · PunditBot — LIVE ONLY. Golo only talks about the matches you've
 // favorited (⭐ on Match Centre). Commentary is generated from each favorited
@@ -50,6 +102,24 @@ export default function PunditFeed() {
     return matches.filter((m) => isFav(m.fixtureId));
   }, [feed, isFav]);
 
+  // The match Golo features: the MOST RECENTLY favorited one, preferring a live
+  // (or half-time) game, otherwise the latest favorite even if it's finished. JS
+  // Sets keep insertion order, so the last starred id is the most recent.
+  const focus = useMemo(() => {
+    if (favorited.length === 0) return null;
+    const favIds = [...favorites];
+    const byRecency = favorited
+      .slice()
+      .sort((a, b) => favIds.indexOf(b.fixtureId) - favIds.indexOf(a.fixtureId));
+    return byRecency.find((m) => m.phase === "LIVE" || m.phase === "HT") ?? byRecency[0];
+  }, [favorited, favorites]);
+
+  // Full-match recap for the focused fixture (beginning → now).
+  const recap = useQuery(recapRef, focus ? { fixtureId: focus.fixtureId } : "skip") as
+    | RecapData
+    | null
+    | undefined;
+
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const endRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
@@ -57,12 +127,63 @@ export default function PunditFeed() {
 
   const push = (text: string, kind: Msg["kind"]) =>
     setMsgs((prev) => [
-      ...prev.slice(-14),
+      ...prev.slice(-70),
       { id: `${Date.now()}-${seq.current++}`, text, kind, at: Date.now() },
     ]);
 
+  // Load out the whole match, kickoff → now, whenever the focused fixture
+  // changes: seed the feed with a recap built from its recorded events, then let
+  // the live loop below carry on from there.
+  const recappedFixture = useRef<number | null>(null);
   useEffect(() => {
-    for (const m of favorited) {
+    if (!focus || !recap || recap.fixtureId !== focus.fixtureId) return;
+    if (recappedFixture.current === focus.fixtureId) return;
+    recappedFixture.current = focus.fixtureId;
+
+    let n = 0;
+    const mk = (text: string, kind: Msg["kind"]): Msg => ({
+      id: `recap-${focus.fixtureId}-${n++}`,
+      text,
+      kind,
+      at: Date.now(),
+    });
+    const lines: Msg[] = [
+      mk(`📼 Full-match recap — ${recap.homeName} v ${recap.awayName}. Here's the whole story, call by call.`, "note"),
+    ];
+    if (recap.probs) {
+      lines.push(
+        mk(`Kickoff market: ${recap.homeCode} ${recap.probs.home}% · draw ${recap.probs.draw}% · ${recap.awayCode} ${recap.probs.away}%.`, "note"),
+      );
+    }
+    for (const e of recap.events.slice(-40)) {
+      const l = recapLine(e, recap.homeCode, recap.awayCode);
+      lines.push(mk(l.text, l.kind));
+    }
+    const standing =
+      recap.phase === "FT"
+        ? `Full time — ${recap.homeCode} ${recap.score[0]}-${recap.score[1]} ${recap.awayCode}.`
+        : `${recap.minute}' now — ${recap.homeCode} ${recap.score[0]}-${recap.score[1]} ${recap.awayCode}. Live from here.`;
+    lines.push(mk(standing, "note"));
+    setMsgs(lines);
+
+    // Reset live tracking so the loop below continues from the recap's end
+    // rather than re-announcing everything.
+    tracked.current = {
+      [focus.fixtureId]: {
+        seenIntro: true,
+        score: `${recap.score[0]}-${recap.score[1]}`,
+        phase: recap.phase,
+        pHome: recap.probs?.home,
+        minute: recap.minute,
+        lastCall: null,
+        lastRecAt: 0,
+      },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.fixtureId, recap?.fixtureId]);
+
+  useEffect(() => {
+    for (const m of focus ? [focus] : []) {
       const L = tracked.current[m.fixtureId];
 
       // New favorited match in focus → intro once.
@@ -168,7 +289,8 @@ export default function PunditFeed() {
         }
       }
     }
-  }, [favorited]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus?.fixtureId, focus?.minute, focus?.score, focus?.phase, focus?.probs]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -177,11 +299,9 @@ export default function PunditFeed() {
   const noFavorites = favorites.size === 0;
   const watchingLabel = noFavorites
     ? "no favorites yet"
-    : favorited.length === 0
+    : !focus
       ? "favorited matches aren't live right now"
-      : favorited.length === 1
-        ? `watching ${favorited[0].home.code} v ${favorited[0].away.code}`
-        : `watching ${favorited.length} favorited matches`;
+      : `${focus.phase === "LIVE" || focus.phase === "HT" ? "live · " : ""}${focus.home.code} v ${focus.away.code}`;
 
   return (
     <div>
@@ -216,6 +336,21 @@ export default function PunditFeed() {
           </span>
         </a>
       </div>
+
+      {/* low-context notch: explains the full-match recap behaviour */}
+      {focus && (
+        <p className="mt-3 flex items-start gap-2 rounded-xl border border-line bg-night/50 px-3 py-2 font-mono text-[10px] leading-relaxed text-muted">
+          <span className="mt-px shrink-0 text-volt">ⓘ</span>
+          <span>
+            Golo loads your most-recent favourite from kickoff — the full match, call by call —
+            then keeps going live. Live games come up first; otherwise the latest star.{" "}
+            <Link href="/matches" className="text-volt hover:underline">
+              Star another match
+            </Link>{" "}
+            to switch.
+          </span>
+        </p>
+      )}
 
       {/* feed / empty state */}
       {noFavorites ? (

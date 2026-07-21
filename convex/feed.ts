@@ -208,6 +208,40 @@ export const live = query({
   },
 });
 
+/**
+ * Full-match recap for Golo · PunditBot: a favorited fixture's whole story from
+ * kickoff — its recorded notable events (goals/cards/corners/…, oldest→newest)
+ * plus the current score/minute/phase/probs — so the pundit feed can load out
+ * the entire match, not just react to what happens after you open it.
+ */
+export const recap = query({
+  args: { fixtureId: v.number() },
+  handler: async (ctx, { fixtureId }) => {
+    const fx = await ctx.db
+      .query("liveFixtures")
+      .withIndex("by_fixture", (q) => q.eq("fixtureId", fixtureId))
+      .unique();
+    if (!fx) return null;
+    return {
+      fixtureId: fx.fixtureId,
+      homeCode: fx.homeCode,
+      awayCode: fx.awayCode,
+      homeName: fx.homeName,
+      awayName: fx.awayName,
+      score: [fx.homeGoals, fx.awayGoals] as [number, number],
+      minute: fx.minute ?? 0,
+      phase: fx.phase,
+      competition: fx.competition,
+      probs:
+        fx.pHome != null ? { home: fx.pHome, draw: fx.pDraw ?? 0, away: fx.pAway ?? 0 } : null,
+      events: (fx.recentEvents ?? [])
+        .slice()
+        .sort((a, b) => a.seq - b.seq)
+        .map((e) => ({ seq: e.seq, minute: e.minute, action: e.action, side: e.side, detail: e.detail })),
+    };
+  },
+});
+
 // The tick at/just-before a timestamp — used to resolve live Hi-Lo rounds.
 export const tickAt = query({
   args: { fixtureId: v.number(), ts: v.number() },
