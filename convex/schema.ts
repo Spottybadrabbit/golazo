@@ -409,6 +409,51 @@ export default defineSchema({
     statusId: v.optional(v.number()),
     phase: v.string(),
     inPlay: v.boolean(),
+    // ── Completion / settlement (drives instant pool-bet payout) ──
+    // `final` is set once the match is over (feed's final flag, or a past-90'
+    // fixture the feed has stopped updating). `outcome` is the settled 1X2
+    // result; `settledAt` marks that pending pool bets on this fixture have
+    // been paid/graded, so settlement is idempotent (never double-pays).
+    final: v.optional(v.boolean()),
+    outcome: v.optional(v.union(v.literal("HOME"), v.literal("DRAW"), v.literal("AWAY"))),
+    settledAt: v.optional(v.number()),
+    // Live match stats (written by the in-game-stats poller on another branch);
+    // declared optional here so this schema validates against that shared data.
+    statsHome: v.optional(
+      v.object({
+        corners: v.number(),
+        fouls: v.number(),
+        goals: v.number(),
+        red: v.number(),
+        shots: v.number(),
+        shotsOnTarget: v.number(),
+        yellow: v.number(),
+      }),
+    ),
+    statsAway: v.optional(
+      v.object({
+        corners: v.number(),
+        fouls: v.number(),
+        goals: v.number(),
+        red: v.number(),
+        shots: v.number(),
+        shotsOnTarget: v.number(),
+        yellow: v.number(),
+      }),
+    ),
+    // Recent notable events (goal/card/corner/shot/…) — also written by the
+    // in-game-stats poller on another branch; optional so this schema validates.
+    recentEvents: v.optional(
+      v.array(
+        v.object({
+          seq: v.number(),
+          minute: v.number(),
+          action: v.string(),
+          side: v.string(),
+          detail: v.string(),
+        }),
+      ),
+    ),
     competition: v.string(),
     // pre-match / live 1X2 (nullable until odds exist)
     oddsHome: v.optional(v.number()),
