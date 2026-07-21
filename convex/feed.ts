@@ -2,6 +2,40 @@ import { query, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 
+// Shared validators for the in-game stats accumulator + notable-event stream.
+const STAT_LINE = v.object({
+  goals: v.number(),
+  corners: v.number(),
+  shots: v.number(),
+  shotsOnTarget: v.number(),
+  yellow: v.number(),
+  red: v.number(),
+  fouls: v.number(),
+});
+const EVENT_ITEM = v.object({
+  seq: v.number(),
+  minute: v.number(),
+  action: v.string(),
+  side: v.string(),
+  detail: v.string(),
+});
+type StatLineDoc = {
+  goals: number;
+  corners: number;
+  shots: number;
+  shotsOnTarget: number;
+  yellow: number;
+  red: number;
+  fouls: number;
+};
+type EventItemDoc = {
+  seq: number;
+  minute: number;
+  action: string;
+  side: string;
+  detail: string;
+};
+
 // ── internal mutations (called by the poller) ──
 
 export const upsertFixture = internalMutation({
@@ -28,6 +62,10 @@ export const upsertFixture = internalMutation({
     pDraw: v.optional(v.number()),
     pAway: v.optional(v.number()),
     startTime: v.optional(v.number()),
+    // in-game stats + notable-event stream (oriented to display home/away)
+    statsHome: v.optional(STAT_LINE),
+    statsAway: v.optional(STAT_LINE),
+    recentEvents: v.optional(v.array(EVENT_ITEM)),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -148,6 +186,9 @@ function toLiveMatch(f: {
   pDraw?: number;
   pAway?: number;
   startTime?: number;
+  statsHome?: StatLineDoc;
+  statsAway?: StatLineDoc;
+  recentEvents?: EventItemDoc[];
   updatedAt: number;
 }) {
   const phase = f.phase === "SCHED" ? "BREAK" : f.phase;
@@ -164,6 +205,9 @@ function toLiveMatch(f: {
         ? { home: f.oddsHome, draw: f.oddsDraw ?? 0, away: f.oddsAway ?? 0 }
         : null,
     probs: f.pHome != null ? { home: f.pHome, draw: f.pDraw ?? 0, away: f.pAway ?? 0 } : null,
+    stats:
+      f.statsHome && f.statsAway ? { home: f.statsHome, away: f.statsAway } : null,
+    events: f.recentEvents ?? [],
     startTime: f.startTime,
     updatedAt: f.updatedAt,
   };
@@ -189,14 +233,21 @@ export const live = query({
     const matches = fixtures.map(toLiveMatch);
 
     const inPlay = (m: (typeof matches)[number]) => m.phase === "LIVE" || m.phase === "HT";
-    // Always feature the best REAL match: a World Cup game with odds wins over a
-    // stale poll pointer (which can drift to a no-odds friendly on a transient
-    // odds-fetch miss). Only honor the pointer if it actually has odds/in-play.
+    const maxProb = (m: (typeof matches)[number]) =>
+      m.probs ? Math.max(m.probs.home, m.probs.draw, m.probs.away) : 0;
+    // A "competitive" match is in-play, priced, and NOT a dead rubber — one
+    // outcome pinned ≥ 95% (e.g. a team 1-3 down late) makes a frozen, pointless
+    // Hi-Lo, so it must never be the marquee while a real contest is live.
+    const competitive = (m: (typeof matches)[number]) =>
+      Boolean(m.odds) && inPlay(m) && maxProb(m) < 95;
+    // matches come newest-updated first, so `find` also prefers the freshest.
     const featured =
+      matches.find((m) => isWorldCup(m.competition) && competitive(m)) ??
       matches.find((m) => isWorldCup(m.competition) && m.odds && inPlay(m)) ??
       matches.find((m) => isWorldCup(m.competition) && m.odds) ??
       // A World Cup match stays the marquee even if odds momentarily drop.
       matches.find((m) => isWorldCup(m.competition)) ??
+      matches.find((m) => competitive(m)) ??
       matches.find((m) => m.fixtureId === state?.featuredFixtureId && (m.odds || inPlay(m))) ??
       matches.find((m) => m.odds && inPlay(m)) ??
       matches.find((m) => m.odds) ??

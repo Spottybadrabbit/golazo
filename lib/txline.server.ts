@@ -181,6 +181,96 @@ function mapScore(records: TxScoreRecord[]): {
   return { score: [home, away], minute, phase, final };
 }
 
+// ---- in-game stats accumulator + notable-event stream (parity with the
+// Convex mapper) — the same real Score accumulator + Action feed, oriented to
+// display home/away by Participant1IsHome. ---------------------------------
+
+interface StatLine {
+  goals: number;
+  corners: number;
+  shots: number;
+  shotsOnTarget: number;
+  yellow: number;
+  red: number;
+  fouls: number;
+}
+
+function readStatLine(total: unknown): StatLine {
+  const t = (total ?? {}) as Record<string, unknown>;
+  const n = (...keys: string[]): number => {
+    for (const k of keys) {
+      const v = t[k];
+      if (typeof v === "number") return v;
+      if (typeof v === "string" && v.trim() !== "" && !isNaN(Number(v))) return Number(v);
+    }
+    return 0;
+  };
+  return {
+    goals: n("Goals"),
+    corners: n("Corners"),
+    shots: n("Shots"),
+    shotsOnTarget: n("ShotsOnTarget"),
+    yellow: n("YellowCards"),
+    red: n("RedCards"),
+    fouls: n("Fouls"),
+  };
+}
+
+function mapStats(
+  records: TxScoreRecord[],
+  p1IsHome: boolean,
+): { home: StatLine; away: StatLine } | null {
+  let best: Record<string, unknown> | null = null;
+  let bestSeq = -Infinity;
+  for (const r of records as unknown as Record<string, unknown>[]) {
+    const sc = r.Score as Record<string, unknown> | undefined;
+    if (sc && (sc.Participant1 || sc.Participant2)) {
+      const seq = Number(r.Seq ?? 0);
+      if (seq >= bestSeq) {
+        bestSeq = seq;
+        best = sc;
+      }
+    }
+  }
+  if (!best) return null;
+  const p1 = readStatLine((best.Participant1 as Record<string, unknown>)?.Total);
+  const p2 = readStatLine((best.Participant2 as Record<string, unknown>)?.Total);
+  return p1IsHome ? { home: p1, away: p2 } : { home: p2, away: p1 };
+}
+
+const NOTABLE_ACTIONS = new Set([
+  "goal",
+  "yellow_card",
+  "red_card",
+  "penalty",
+  "corner",
+  "shot",
+  "free_kick",
+  "substitution",
+  "injury",
+]);
+
+function mapEvents(
+  records: TxScoreRecord[],
+  p1IsHome: boolean,
+  limit = 14,
+): NonNullable<LiveMatch["events"]> {
+  const out: NonNullable<LiveMatch["events"]> = [];
+  for (const r of records as unknown as Record<string, unknown>[]) {
+    const action = String(r.Action ?? "").toLowerCase();
+    if (!NOTABLE_ACTIONS.has(action)) continue;
+    const clock = r.Clock as { Seconds?: number } | undefined;
+    const secs = typeof clock?.Seconds === "number" ? clock.Seconds : 0;
+    const p = Number(r.Participant ?? 0);
+    const data = (r.Data ?? {}) as Record<string, unknown>;
+    const detail = String(data.Outcome ?? data.FreeKickType ?? "");
+    const side: "home" | "away" | "" = p === 0 ? "" : (p === 1) === p1IsHome ? "home" : "away";
+    out.push({ seq: Number(r.Seq ?? 0), minute: Math.floor(secs / 60), action, side, detail });
+  }
+  out.sort((a, b) => a.seq - b.seq);
+  return out.slice(-limit);
+}
+
 function toLiveTeam(name: string): LiveTeam {
   const t = teamFromName(name);
   return { code: t.code, name: t.name, flag: t.flag };
@@ -209,6 +299,8 @@ async function buildFeed(): Promise<LiveFeed | null> {
     let score: [number, number] = [0, 0];
     let minute = 0;
     let phase = "BREAK";
+    let stats: LiveMatch["stats"] = null;
+    let events: LiveMatch["events"] = [];
     try {
       const oddsRecs = await txGet<TxOddsRecord[]>(
         origin,
@@ -233,6 +325,11 @@ async function buildFeed(): Promise<LiveFeed | null> {
       score = s.score;
       minute = s.minute;
       phase = s.phase;
+      stats = mapStats(scoreRecs ?? [], fx.Participant1IsHome);
+      events = mapEvents(scoreRecs ?? [], fx.Participant1IsHome);
+      // The cumulative Score accumulator is the authoritative goal source when
+      // present (a real 0-0 reads as 0-0), same as the Convex mapper.
+      if (stats) score = [stats.home.goals, stats.away.goals];
     } catch {
       /* no scores for this fixture */
     }
@@ -250,6 +347,8 @@ async function buildFeed(): Promise<LiveFeed | null> {
       competition: fx.Competition,
       odds,
       probs,
+      stats,
+      events,
       startTime: fx.StartTime,
       updatedAt: Date.now(),
     });

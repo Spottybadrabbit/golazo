@@ -174,7 +174,10 @@ export const topUp = mutation({
 export const placeFastBet = mutation({
   args: {
     fixtureId: v.number(),
-    market: v.union(v.literal("home"), v.literal("draw"), v.literal("away")),
+    // "home" | "draw" | "away" for win-prob Hi-Lo, or an event-stream stat
+    // market for Stat Hi-Lo ("corner_next", "shot_target_next", "card_next",
+    // "corners_ou", …). The bets table already stores market as a free string.
+    market: v.string(),
     direction: v.union(v.literal("higher"), v.literal("lower")),
     stakeSol: v.number(),
     lockedValue: v.number(),
