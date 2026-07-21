@@ -463,44 +463,6 @@ export default defineSchema({
     pDraw: v.optional(v.number()),
     pAway: v.optional(v.number()),
     startTime: v.optional(v.number()),
-    // Cumulative in-game stats, oriented to display home/away (absent until the
-    // scores snapshot carries a Score accumulator).
-    statsHome: v.optional(
-      v.object({
-        goals: v.number(),
-        corners: v.number(),
-        shots: v.number(),
-        shotsOnTarget: v.number(),
-        yellow: v.number(),
-        red: v.number(),
-        fouls: v.number(),
-      }),
-    ),
-    statsAway: v.optional(
-      v.object({
-        goals: v.number(),
-        corners: v.number(),
-        shots: v.number(),
-        shotsOnTarget: v.number(),
-        yellow: v.number(),
-        red: v.number(),
-        fouls: v.number(),
-      }),
-    ),
-    // Recent notable events (goal/card/corner/shot/…), oldest→newest by seq,
-    // side oriented to display home/away ("" when unattributed). PunditBot
-    // streams these line-by-line.
-    recentEvents: v.optional(
-      v.array(
-        v.object({
-          seq: v.number(),
-          minute: v.number(),
-          action: v.string(),
-          side: v.string(),
-          detail: v.string(),
-        }),
-      ),
-    ),
     updatedAt: v.number(),
   })
     .index("by_fixture", ["fixtureId"])
