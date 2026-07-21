@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import AppShell from "@/components/AppShell";
-import SquadBoard from "@/components/squad/SquadBoard";
+import SweepstakesTabs from "@/components/squad/SweepstakesTabs";
 
 export const metadata: Metadata = {
   title: "Squad sweepstake. GOLAZO",
-  description: "Create a sweepstakes group, share the invite link, and pick the live match together.",
+  description: "Check the worldwide leaderboard, or create a group, share the invite link, and pick the live match together.",
 };
 
 export default function SquadPage() {
   return (
     <AppShell>
-      <SquadBoard />
+      <SweepstakesTabs />
     </AppShell>
   );
 }

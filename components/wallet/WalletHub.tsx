@@ -6,6 +6,7 @@ import { SignInButton, useClerk, useUser } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import GlossyIcon from "@/components/icons/GlossyIcons";
+import TopUpPanel from "@/components/wallet/TopUpPanel";
 import {
   connectWallet,
   disconnectWallet,
@@ -77,7 +78,7 @@ export default function WalletHub() {
       </div>
 
       <div className="mt-5">
-        {tab === "overview" && <Overview player={player} />}
+        {tab === "overview" && <Overview player={player} update={update} />}
         {tab === "history" && <TransactionHistory player={player} />}
         {tab === "settings" && <Settings player={player} update={update} realWallet={clerkOn} />}
       </div>
@@ -347,7 +348,13 @@ export function BalanceCard({
   );
 }
 
-function Overview({ player }: { player: PlayerState }) {
+function Overview({
+  player,
+  update,
+}: {
+  player: PlayerState;
+  update: (p: PlayerState) => void;
+}) {
   const earned = useMemo(
     () =>
       (player.ledger ?? [])
@@ -365,14 +372,19 @@ function Overview({ player }: { player: PlayerState }) {
     { label: "Picks made", value: `${player.picks}`, icon: "star" as const, tint: "cyan" as const },
   ];
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-      {stats.map((s) => (
-        <div key={s.label} className="rounded-2xl border border-line bg-surface p-4">
-          <GlossyIcon name={s.icon} tint={s.tint} size={30} />
-          <div className="mt-2 text-2xl font-extrabold text-chalk">{s.value}</div>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-muted">{s.label}</div>
-        </div>
-      ))}
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {stats.map((s) => (
+          <div key={s.label} className="rounded-2xl border border-line bg-surface p-4">
+            <GlossyIcon name={s.icon} tint={s.tint} size={30} />
+            <div className="mt-2 text-2xl font-extrabold text-chalk">{s.value}</div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-muted">
+              {s.label}
+            </div>
+          </div>
+        ))}
+      </div>
+      <TopUpPanel player={player} update={update} />
     </div>
   );
 }
@@ -446,11 +458,21 @@ function ConvexHistory() {
               {relTime(r.createdAt)}
             </div>
           </div>
-          <div
-            className={`font-mono text-sm font-bold ${r.amount >= 0 ? "text-up" : "text-down"}`}
-          >
-            {r.amount > 0 ? "+" : ""}
-            {r.amount} {r.currency}
+          <div className="text-right">
+            <div
+              className={`font-mono text-sm font-bold ${r.amount >= 0 ? "text-up" : "text-down"}`}
+            >
+              {r.amount > 0 ? "+" : ""}
+              {r.amount} {r.currency}
+            </div>
+            {/* balanceAfter is only shown for GOAL: pool bets' SOL rows
+                (convex/wallet.ts placeBet) compute balanceAfter without the
+                SOL play-money INITIAL_GRANT, so it doesn't reconcile with
+                the SOL balance shown elsewhere — a pre-existing quirk out
+                of scope here, left un-displayed rather than shown wrong. */}
+            {r.currency === "GOAL" && (
+              <div className="font-mono text-[10px] text-muted">bal {r.balanceAfter} GOAL</div>
+            )}
           </div>
         </li>
       ))}

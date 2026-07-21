@@ -3,15 +3,18 @@
 import { useState } from "react";
 import StreakScreen from "@/components/gamify/StreakScreen";
 import ProfileView from "@/components/gamify/ProfileView";
+import ProfileWallet from "@/components/gamify/ProfileWallet";
 
-// Streak | Profile segmented switcher for /profile — same rounded-pill tab
-// pattern as components/wallet/WalletHub.tsx's Overview/History/Settings.
+// Streak | Profile | Wallet segmented switcher for /profile — same
+// rounded-pill tab pattern as components/wallet/WalletHub.tsx's
+// Overview/History/Settings.
 
-type Tab = "streak" | "profile";
+type Tab = "streak" | "profile" | "wallet";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "streak", label: "Streak" },
   { id: "profile", label: "Profile" },
+  { id: "wallet", label: "Wallet" },
 ];
 
 export default function ProfileTabs() {
@@ -33,7 +36,11 @@ export default function ProfileTabs() {
           </button>
         ))}
       </div>
-      <div className="mt-5">{tab === "streak" ? <StreakScreen /> : <ProfileView />}</div>
+      <div className="mt-5">
+        {tab === "streak" && <StreakScreen />}
+        {tab === "profile" && <ProfileView />}
+        {tab === "wallet" && <ProfileWallet />}
+      </div>
     </div>
   );
 }

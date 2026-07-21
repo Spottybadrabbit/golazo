@@ -19,11 +19,18 @@ export interface ActivityRow {
   createdAt: number;
 }
 
+// Raw screen views + onboarding plumbing are noise in the feed — they read as
+// "Viewed bank / Viewed settings" rather than something the player actually
+// did. Everything else (games, rewards, wallet moves, celebrations, actions)
+// stays.
+const NOISE_KINDS = new Set(["screen_view", "onboarding"]);
+
 export default function ActivityFeed({ rows }: { rows: ActivityRow[] }) {
-  if (rows.length === 0) return <EmptyFeed />;
+  const visible = rows.filter((r) => !NOISE_KINDS.has(r.kind));
+  if (visible.length === 0) return <EmptyFeed />;
   return (
     <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
-      {rows.map((r) => (
+      {visible.map((r) => (
         <li key={r._id} className="flex items-center gap-3 px-4 py-3">
           <GlossyIcon name={iconFor(r.kind)} tint={tintFor(r.kind)} size={26} />
           <div className="min-w-0 flex-1">

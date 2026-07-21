@@ -181,6 +181,18 @@ export function bankStreak(p: PlayerState): { next: PlayerState; banked: number;
   return { next, banked, fee };
 }
 
+/**
+ * Local (signed-out / Convex-unreachable) play-money GOAL top-up: credits
+ * GOAL points and logs it to the local ledger. Mirrors what Convex `topUp`
+ * (convex/wallet.ts) records server-side for signed-in players.
+ */
+export function topUpLocal(p: PlayerState, amount: number): PlayerState {
+  return pushTx(
+    { ...p, goalPoints: p.goalPoints + amount },
+    { kind: "bank", label: `Play money top-up +${amount} GOAL`, goal: amount },
+  );
+}
+
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export function mockWalletAddress(): string {
